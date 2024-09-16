@@ -1,0 +1,21 @@
+    final int userId = await pref.getInt('userId') ?? 0;
+    final String name = await pref.getString('name') ?? '';
+    final String phone = await pref.getString('phone') ?? '';
+    final String email = await pref.getString('email') ?? '';
+    final String userType = await pref.getString('userType') ?? '';
+
+    debugPrint('userId: $userId');
+    debugPrint('name: $name');
+    debugPrint('phone: $phone (REDACTED for security)'); // Redact phone number
+    debugPrint('email: $email');
+    debugPrint('userType: $userType');
+
+
+//to print the data in get_home_facility
+ if (apiResponse.data != null) {
+    List<Options> optionsList = apiResponse.data as List<Options>;
+    optionsList.forEach((options) {
+      print(options);
+    });
+  }
+    

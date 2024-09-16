@@ -1,0 +1,46 @@
+{
+  "project_info": {
+    "project_number": "738981277021",
+    "project_id": "ghorbhara-e0144",
+    "storage_bucket": "ghorbhara-e0144.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:738981277021:android:d211ab7e03d20f933f8cb4",
+        "android_client_info": {
+          "package_name": "com.example.hello_world"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "738981277021-b6s86rpdlsnhnvns4m8nmvsi17kafrn6.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCIW2Z7KTm9ijd-XuZuAQbPGyIAHGvARRU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "738981277021-b6s86rpdlsnhnvns4m8nmvsi17kafrn6.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "738981277021-5gdj1u0u195jdkn7qo5q2j9m7k4i9uo8.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.helloWorld"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
