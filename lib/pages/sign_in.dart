@@ -1,19 +1,12 @@
-// ignore_for_file: prefer_const_constructors
-
-import 'dart:io';
-
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:hello_world/helper/dialogs.dart';
+import 'package:hello_world/config/app_config.dart';
 import 'package:hello_world/models/api_response.dart';
 import 'package:hello_world/models/user.dart' as local_user;
-import 'package:hello_world/pages/components/reusables/snackbar.dart';
 import 'package:hello_world/pages/home.dart';
 import 'package:hello_world/pages/signupp.dart';
+import 'package:hello_world/services/local_auth_service.dart';
 import 'package:hello_world/services/user_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:google_sign_in/google_sign_in.dart';
-import 'package:sign_in_button/sign_in_button.dart';
 
 class SignIn extends StatefulWidget {
   const SignIn({super.key, this.successMessage});
@@ -24,139 +17,71 @@ class SignIn extends StatefulWidget {
 }
 
 class _SignInState extends State<SignIn> {
+  final TextEditingController _mailController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
+  bool _loading = false;
+  bool _obscurePassword = true;
+
   @override
   void initState() {
     super.initState();
-    Future(() {
-      _onLoad();
-    });
-  }
-
-  final GoogleSignIn _googleSignIn = GoogleSignIn();
-
-  //google sigin
-  _handle_google_singin() {
-    Dialogs.showProgressBar(context);
-    _signInWithGoogle().then((user) async {
-      //for hiding progress bar
-
-      if (user != null) {
-        //function to check and register the user in sql db
-        await regsiter_google_users(user.user).then((value) async {
-          // print('value');
-
-          if (value.error == null) {
-            if (value.data is Map<String, dynamic>) {
-              Map<String, dynamic> dataMap = value.data as Map<String, dynamic>;
-              if (dataMap['status'] == 'success') {
-                if ((await API.userExists(user.user))) {
-                  // Dialogs.showProgressBar(context);
-                  Navigator.pop(context);
-                  Navigator.of(context).pushAndRemoveUntil(
-                      MaterialPageRoute(builder: (context) => Home()),
-                      (route) => false);
-                } else {
-                  await API.createUser(user.user).then((value) {
-                    Navigator.of(context).pushAndRemoveUntil(
-                        MaterialPageRoute(builder: (context) => Home()),
-                        (route) => false);
-                  });
-                }
-              } else {
-                showErrorSnackBar(
-                    context, "Oops, something went wrong. Please try again.");
-              }
-            } else {
-              showErrorSnackBar(
-                  context, "Oops, something went wrong. Please try again.");
-            }
-          } else {
-            showErrorSnackBar(
-                context, "Oops, something went wrong. Please try again.");
-          }
-        });
-      }
-    });
-  }
-
-  Future<UserCredential?> _signInWithGoogle() async {
-    // Trigger the authentication flow
-
-    try {
-      // await InternetAddress.lookup('google.com');
-      final GoogleSignInAccount? googleUser = await GoogleSignIn().signIn();
-
-      // Obtain the auth details from the request
-      final GoogleSignInAuthentication? googleAuth =
-          await googleUser?.authentication;
-
-      // Create a new credential
-      final credential = GoogleAuthProvider.credential(
-        accessToken: googleAuth?.accessToken,
-        idToken: googleAuth?.idToken,
-      );
-
-      // Once signed in, return the UserCredential
-      return await FirebaseAuth.instance.signInWithCredential(credential);
-    } catch (e) {
-      print('_signInWithGoogle : ${e}');
-      // ignore: use_build_context_synchronously
-      // Dialogs.showSnackbar(context, 'Check Internet Connection');
-      return null;
+    if (widget.successMessage != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(widget.successMessage!)),
+        );
+      });
     }
   }
 
-  // _signOut_google() async {
-  //   await FirebaseAuth.instance.signOut();
-  //   await GoogleSignIn.signOut();
-  // }
+  @override
+  void dispose() {
+    _mailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
 
-  void _loginUser() async {
+  Future<void> _loginUser() async {
     final email = _mailController.text.trim();
     final password = _passwordController.text.trim();
-    ApiResponse response = await signin(email, password);
-    // print(response.data);
 
-    final scaffoldMessenger = ScaffoldMessenger.of(context);
-
-    if (response.error == null && response.data != null) {
-      _saveAndRedirectToHome(response.data as local_user.User);
-    } else {
-      setState(() {
-        loading = false;
-      });
-      scaffoldMessenger.showSnackBar(
-        SnackBar(
-          content: Text('${response.error}'),
+    if (email.isEmpty || password.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enter email and password'),
           backgroundColor: Colors.red,
         ),
       );
+      return;
     }
-  }
 
-  void _saveAndRedirectToHome(local_user.User user) async {
-    await saveUserToSharedPreferences(user, 'N');
-    print(user);
-    SharedPreferences pref = await SharedPreferences.getInstance();
-    await pref.setString('is_google_login', 'N');
-    // Navigator.push(
-    //   context,
-    //   MaterialPageRoute(builder: (context) => const Home()),
-    // );
-    Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (context) => Home()), (route) => false);
-  }
+    setState(() => _loading = true);
 
-  TextEditingController _mailController = TextEditingController();
-  TextEditingController _passwordController = TextEditingController();
-  bool loading = false;
-  void _onLoad() {
-    if (widget.successMessage != null) {
-      // Show snackbar with provided message
-      final scaffoldMessenger = ScaffoldMessenger.of(context);
-      scaffoldMessenger.showSnackBar(
+    ApiResponse response;
+    if (AppConfig.useLocalMode) {
+      response = await LocalAuthService().localSignIn(email, password);
+    } else {
+      response = await signin(email, password);
+    }
+
+    if (!mounted) return;
+
+    if (response.error == null && response.data != null) {
+      final user = response.data as local_user.User;
+      await saveUserToSharedPreferences(user, 'N');
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('is_google_login', 'N');
+      if (!mounted) return;
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const Home()),
+        (route) => false,
+      );
+    } else {
+      setState(() => _loading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(widget.successMessage!),
+          content: Text(response.error ?? 'Login failed'),
+          backgroundColor: Colors.red,
         ),
       );
     }
@@ -164,297 +89,246 @@ class _SignInState extends State<SignIn> {
 
   @override
   Widget build(BuildContext context) {
-    // _onLoad();
-
     return GestureDetector(
       onTap: () => FocusScope.of(context).unfocus(),
       child: Scaffold(
+        backgroundColor: Colors.white,
         body: SafeArea(
           child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
             child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const SizedBox(height: 130),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 21),
-                  child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Ghorbhara',
-                            style: TextStyle(
-                              color: Colors.blue[400],
-                              fontSize: 30,
-                              fontFamily: 'Hind',
-                              fontWeight: FontWeight.w600,
-                              height: -0.5,
-                            ),
-                          ),
-                          Text(
-                            'Sign in',
-                            style: TextStyle(
-                              color: Colors.blue[800],
-                              fontSize: 55,
-                              fontFamily: 'Hind',
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: .7,
-                            ),
-                          ),
-                          Padding(
-                              padding: const EdgeInsets.only(top: 20),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'YOUR EMAIL',
-                                    style: TextStyle(
-                                      color: Colors.grey[400],
-                                    ),
-                                  ),
-                                ],
-                              )),
-                          Padding(
-                            padding: const EdgeInsets.only(top: 10),
-                            child: TextField(
-                              controller: _mailController,
-                              cursorColor: Colors.blue.shade300,
-                              decoration: InputDecoration(
-                                // Move cursorColor here
-                                focusedBorder: OutlineInputBorder(
-                                  borderSide:
-                                      BorderSide(color: Colors.blue.shade300),
-                                ),
-                                // Set the cursor color
-                                border: InputBorder.none,
-                                filled: true,
-                                fillColor:
-                                    const Color.fromARGB(102, 235, 236, 236),
-                              ),
-                            ),
-                          ),
-                          Padding(
-                            padding: const EdgeInsets.only(top: 20),
-                            child: Text(
-                              'PASSWORD',
-                              style: TextStyle(
-                                color: Colors.grey[400],
-                              ),
-                            ),
-                          ),
-                          Padding(
-                            padding: const EdgeInsets.only(top: 20),
-                            child: TextField(
-                              obscureText: true,
-                              controller: _passwordController,
-                              cursorColor: Colors.blue.shade300,
-                              decoration: InputDecoration(
-                                border: InputBorder.none,
-                                // enabledBorder: OutlineInputBorder(
-                                //     borderSide:
-                                //         BorderSide(color: Colors.blue.shade300)),
-                                focusedBorder: OutlineInputBorder(
-                                  borderSide:
-                                      BorderSide(color: Colors.blue.shade300),
-                                ),
-                                filled: true,
-                                fillColor:
-                                    const Color.fromARGB(102, 235, 236, 236),
-                              ),
-                            ),
-                          ),
-                          Center(
-                              child: Padding(
-                            padding: const EdgeInsets.only(top: 40),
-                            child: loading
-                                ? Center(
-                                    child: Padding(
-                                      padding:
-                                          const EdgeInsets.only(bottom: 12.0),
-                                      child: CircularProgressIndicator(
-                                        valueColor:
-                                            AlwaysStoppedAnimation<Color>(
-                                                Colors.blue),
-                                      ),
-                                    ),
-                                  )
-                                : ElevatedButton(
-                                    onPressed: () {
-                                      setState(() {
-                                        loading = true;
-                                        _loginUser();
-                                      });
-                                    },
-                                    style: ButtonStyle(
-                                      backgroundColor:
-                                          MaterialStateProperty.all<Color>(
-                                              Colors.blue),
-                                      minimumSize:
-                                          MaterialStateProperty.all<Size>(
-                                              const Size(double.infinity, 48)),
-                                      shape: MaterialStateProperty.all<
-                                          RoundedRectangleBorder>(
-                                        RoundedRectangleBorder(
-                                          borderRadius:
-                                              BorderRadius.circular(8.0),
-                                        ),
-                                      ),
-                                    ),
-                                    child: const Text(
-                                      'Login',
-                                      style: TextStyle(
-                                        fontSize: 18,
-                                        color: Colors.white,
-                                      ),
-                                    ),
-                                  ),
-                          )),
-                          const SizedBox(height: 32),
-                          Center(
-                            child: SignInButton(
-                              Buttons.google,
-                              onPressed: () {
-                                //google sigin
-                                _handle_google_singin();
-                              },
-                              elevation: 1,
-                            ),
-                          ),
-                          // TextButton(
-                          //     onPressed: () {},
-                          //     child: Text(
-                          //       'Signin with google',
-                          //     )),
-                          // TextButton(
-                          //     onPressed: () async {
-                          //       // _handle_google_singin();
-                          //       await FirebaseAuth.instance.signOut();
-                          //       await _googleSignIn.signOut();
-                          //     },
-                          //     child: Text(
-                          //       'signout',
-                          //     )),
-                          const SizedBox(height: 42),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Text(
-                                'Dont have an account?',
-                                style: TextStyle(
-                                  color: Color(0xFF121515),
-                                ),
-                              ),
-                              TextButton(
-                                onPressed: () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                        builder: (context) => Signupp()),
-                                  );
-                                },
-                                child: Text(
-                                  'Sign up',
-                                  style: TextStyle(
-                                    color: Colors
-                                        .blue, // Customize the color as needed
-                                    decoration: TextDecoration
-                                        .underline, // Underline the text
-                                  ),
-                                ),
-                              )
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-
-                          // ElevatedButton(
-                          //   onPressed: () {
-                          //     Navigator.push(
-                          //       context,
-                          //       MaterialPageRoute(
-                          //           builder: (context) => const Signupp()),
-                          //     );
-                          //   },
-                          //   style: ButtonStyle(
-                          //     backgroundColor: MaterialStateProperty.all<Color>(
-                          //         const Color(0xFF121515)),
-                          //     minimumSize: MaterialStateProperty.all<Size>(
-                          //         const Size(double.infinity, 48)),
-                          //     shape: MaterialStateProperty.all<
-                          //         RoundedRectangleBorder>(
-                          //       RoundedRectangleBorder(
-                          //         borderRadius: BorderRadius.circular(8.0),
-                          //       ),
-                          //     ),
-                          //   ),
-                          //   child: const Text(
-                          //     'Create an Account',
-                          //     style: TextStyle(
-                          //       fontSize: 18,
-                          //       color: Colors.white,
-                          //     ),
-                          //   ),
-                          // ),
-
-                          //google or phone option
-                          // Row(
-                          //   mainAxisAlignment: MainAxisAlignment.center,
-                          //   children: [
-                          //     Text(
-                          //       'Continue with',
-                          //       style: TextStyle(
-                          //         color: Color(0xFF121515),
-                          //       ),
-                          //     ),
-                          //     TextButton(
-                          //       onPressed: () {
-                          //         Navigator.push(
-                          //           context,
-                          //           MaterialPageRoute(
-                          //               builder: (context) => Signupp()),
-                          //         );
-                          //       },
-                          //       child: Text(
-                          //         'Google',
-                          //         style: TextStyle(
-                          //           color: Colors
-                          //               .blue, // Customize the color as needed
-                          //           decoration: TextDecoration
-                          //               .underline, // Underline the text
-                          //         ),
-                          //       ),
-                          //     ),
-                          //     Text(
-                          //       'or',
-                          //       style: TextStyle(
-                          //         color: Color(0xFF121515),
-                          //       ),
-                          //     ),
-                          //     TextButton(
-                          //       onPressed: () {
-                          //         Navigator.push(
-                          //           context,
-                          //           MaterialPageRoute(
-                          //               builder: (context) => Signupp()),
-                          //         );
-                          //       },
-                          //       child: Text(
-                          //         'Phone',
-                          //         style: TextStyle(
-                          //           color: Colors
-                          //               .blue, // Customize the color as needed
-                          //           decoration: TextDecoration
-                          //               .underline, // Underline the text
-                          //         ),
-                          //       ),
-                          //     )
-                          //   ],
-                          // ),
-                        ],
-                      )),
+                const SizedBox(height: 60),
+                Container(
+                  width: 56,
+                  height: 56,
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF6246EA), Color(0xFF9B79FF)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: const Icon(Icons.home_rounded,
+                      color: Colors.white, size: 30),
                 ),
+                const SizedBox(height: 24),
+                const Text(
+                  'GhorBhara',
+                  style: TextStyle(
+                    color: Color(0xFF6246EA),
+                    fontSize: 16,
+                    fontFamily: 'Hind',
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const Text(
+                  'Sign in',
+                  style: TextStyle(
+                    color: Color(0xFF1A1A2E),
+                    fontSize: 40,
+                    fontFamily: 'Hind',
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                const SizedBox(height: 32),
+                const Text(
+                  'EMAIL',
+                  style: TextStyle(
+                    color: Color(0xFF8E8E93),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.8,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _mailController,
+                  keyboardType: TextInputType.emailAddress,
+                  style: const TextStyle(
+                      fontSize: 15, color: Color(0xFF1A1A2E)),
+                  decoration: InputDecoration(
+                    hintText: 'Enter your email',
+                    hintStyle: const TextStyle(color: Color(0xFFAAAAAA)),
+                    filled: true,
+                    fillColor: const Color(0xFFF2F2F7),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none,
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(
+                          color: Color(0xFF6246EA), width: 1.5),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 14),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                const Text(
+                  'PASSWORD',
+                  style: TextStyle(
+                    color: Color(0xFF8E8E93),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.8,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _passwordController,
+                  obscureText: _obscurePassword,
+                  style: const TextStyle(
+                      fontSize: 15, color: Color(0xFF1A1A2E)),
+                  decoration: InputDecoration(
+                    hintText: 'Enter your password',
+                    hintStyle: const TextStyle(color: Color(0xFFAAAAAA)),
+                    filled: true,
+                    fillColor: const Color(0xFFF2F2F7),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none,
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(
+                          color: Color(0xFF6246EA), width: 1.5),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 14),
+                    suffixIcon: IconButton(
+                      icon: Icon(
+                        _obscurePassword
+                            ? Icons.visibility_off_rounded
+                            : Icons.visibility_rounded,
+                        color: const Color(0xFF8E8E93),
+                        size: 20,
+                      ),
+                      onPressed: () => setState(
+                          () => _obscurePassword = !_obscurePassword),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 32),
+                SizedBox(
+                  width: double.infinity,
+                  child: _loading
+                      ? const Center(
+                          child: CircularProgressIndicator(
+                              color: Color(0xFF6246EA)))
+                      : ElevatedButton(
+                          onPressed: _loginUser,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF6246EA),
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12)),
+                            elevation: 0,
+                          ),
+                          child: const Text(
+                            'Login',
+                            style: TextStyle(
+                                fontSize: 16,
+                                color: Colors.white,
+                                fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                ),
+                const SizedBox(height: 20),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Text("Don't have an account?",
+                        style: TextStyle(color: Color(0xFF555555))),
+                    TextButton(
+                      onPressed: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => Signupp()),
+                      ),
+                      child: const Text(
+                        'Sign up',
+                        style: TextStyle(
+                          color: Color(0xFF6246EA),
+                          fontWeight: FontWeight.w600,
+                          decoration: TextDecoration.underline,
+                          decorationColor: Color(0xFF6246EA),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                if (AppConfig.useLocalMode) ...[
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFFF8E1),
+                      border: Border.all(color: const Color(0xFFFFCC02)),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Row(
+                          children: [
+                            Icon(Icons.info_rounded,
+                                color: Color(0xFFF59E0B), size: 18),
+                            SizedBox(width: 8),
+                            Text(
+                              'DEMO MODE — tap to fill credentials',
+                              style: TextStyle(
+                                color: Color(0xFF92400E),
+                                fontWeight: FontWeight.w700,
+                                fontSize: 11,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        _demoCredential('Owner', 'owner@example.com'),
+                        _demoCredential('Tenant', 'tenant@example.com'),
+                        _demoCredential(
+                            'Owner 2', 'mike.property@example.com'),
+                        _demoCredential(
+                            'Tenant 2', 'sarah.finder@example.com'),
+                      ],
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 32),
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _demoCredential(String label, String email) {
+    return GestureDetector(
+      onTap: () {
+        _mailController.text = email;
+        _passwordController.text = 'password';
+      },
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 6),
+        child: Row(
+          children: [
+            const Icon(Icons.touch_app_rounded,
+                size: 14, color: Color(0xFFF59E0B)),
+            const SizedBox(width: 6),
+            Text(
+              '$label: $email',
+              style: const TextStyle(
+                  color: Color(0xFF92400E),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500),
+            ),
+          ],
         ),
       ),
     );

@@ -1,344 +1,260 @@
-// import 'dart:convert';
-// import 'dart:io';
-// import 'dart:math';
-
-// import 'package:cached_network_image/cached_network_image.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:emoji_picker_flutter/emoji_picker_flutter.dart';
-// import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:hello_world/models/chat_user.dart';
-import 'package:hello_world/pages/components/reusables/message_card.dart';
-import 'package:hello_world/services/user_service.dart';
+import 'package:hello_world/services/local_chat_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
-import '../models/message.dart';
-
-class ChatScreen extends StatefulWidget {
-  final ChatUser user;
-  const ChatScreen({super.key, required this.user});
+class LocalChatScreen extends StatefulWidget {
+  final int otherUserId;
+  final String otherUserName;
+  const LocalChatScreen(
+      {super.key, required this.otherUserId, required this.otherUserName});
 
   @override
-  State<ChatScreen> createState() => _ChatScreenState();
+  State<LocalChatScreen> createState() => _LocalChatScreenState();
 }
 
-class _ChatScreenState extends State<ChatScreen> {
-  List<Message> list = [];
-  final _textController = TextEditingController();
-  late Future<Stream<QuerySnapshot<Map<String, dynamic>>>> _messagesStream;
-  bool _showemoji = false;
-  // bool _canPop = true;
+class _LocalChatScreenState extends State<LocalChatScreen> {
+  final TextEditingController _textController = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
+  String _currentUserId = '';
+
   @override
   void initState() {
     super.initState();
-    _messagesStream = API.getAllMessages(widget.user);
+    _loadCurrentUser();
+  }
+
+  @override
+  void dispose() {
+    _textController.dispose();
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadCurrentUser() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (mounted) {
+      setState(() {
+        _currentUserId = (prefs.getInt('userId') ?? 0).toString();
+      });
+    }
+  }
+
+  void _sendMessage() {
+    final text = _textController.text.trim();
+    if (text.isEmpty || _currentUserId.isEmpty) return;
+    LocalChatService.sendMessage(
+        _currentUserId, widget.otherUserId.toString(), text);
+    _textController.clear();
+    setState(() {});
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scrollController.hasClients) {
+        _scrollController.animateTo(
+          _scrollController.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        );
+      }
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
-      statusBarColor: Colors.white, // set status bar color to white
-      statusBarIconBrightness:
-          Brightness.dark, // set status bar icon color to dark
-    ));
-    return GestureDetector(
-      onTap: () => FocusScope.of(context).unfocus(),
-      child: SafeArea(
-        child: PopScope(
-          onPopInvoked: (bool) {
-            if (_showemoji) {
-              setState(() {
-                _showemoji = !_showemoji;
-                // return;
-              });
-            }
-          },
-          child: Scaffold(
-            appBar: AppBar(
-              // elevation: 1,
-              automaticallyImplyLeading: false,
-              flexibleSpace: _appBar(),
+    final messages = _currentUserId.isEmpty
+        ? <LocalMessage>[]
+        : LocalChatService.getMessages(
+            _currentUserId, widget.otherUserId.toString());
+
+    return Scaffold(
+      backgroundColor: const Color(0xFFF0EEFF),
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new_rounded,
+              color: Color(0xFF6246EA), size: 20),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: Row(
+          children: [
+            CircleAvatar(
+              radius: 18,
+              backgroundColor: const Color(0xFF6246EA).withValues(alpha: 0.15),
+              child: Text(
+                widget.otherUserName[0].toUpperCase(),
+                style: const TextStyle(
+                    color: Color(0xFF6246EA),
+                    fontWeight: FontWeight.w700,
+                    fontSize: 16),
+              ),
             ),
-            backgroundColor: Color.fromARGB(255, 223, 223, 255),
-            body: Column(
+            const SizedBox(width: 10),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
-                  child: FutureBuilder<
-                          Stream<QuerySnapshot<Map<String, dynamic>>>>(
-                      future: _messagesStream,
-                      //     // FirebaseFirestore.instance.collection('users').snapshots(),
-                      //     API.getAllusers(),
-                      //-----------------------------------------
-                      // builder: (context, snapshot) {
-                      //   switch (snapshot.connectionState) {
-                      //     case ConnectionState.waiting:
-                      //     case ConnectionState.none:
-                      //       return const Center(
-                      //         child: CircularProgressIndicator(),
-                      //       );
-
-                      //     case ConnectionState.active:
-                      //     case ConnectionState.done:
-                      //     final messagesStream = snapshot.data!;
-                      //       final data = snapshot.data?.docs;
-                      //       // print('data: ${jsonEncode(data![0].data())}');
-                      //       list = data
-                      //               ?.map((e) => Message.fromJson(e.data()))
-                      //               .toList() ??
-                      //           [];
-                      //       // final list = [];
-                      //       // print(list);
-                      //       if (list.isNotEmpty) {
-                      //         return ListView.builder(
-                      //           shrinkWrap: true,
-                      //           // physics: BouncingScrollPhysics(),
-                      //           itemCount: list.length,
-                      //           itemBuilder: (context, index) {
-                      //             return MessageCard(
-                      //               message: list[index],
-                      //             );
-                      //           },
-                      //         );
-                      //       } else {
-                      //         return Center(child: Text('Say Hi! 👋🏻'));
-                      //       }
-
-                      //     // break;
-                      //     // default:
-                      //   }
-
-                      //   //  else if (snapshot.hasError) {
-                      //   //   return Text('Error: ${snapshot.error}');
-                      //   // } else {
-                      //   //   return CircularProgressIndicator();
-                      //   // }
-                      // },
-                      //--------------------
-                      builder: (context, snapshot) {
-                        switch (snapshot.connectionState) {
-                          case ConnectionState.waiting:
-                          case ConnectionState.none:
-                            return const Center(
-                              child: CircularProgressIndicator(),
-                            );
-
-                          case ConnectionState.active:
-                          case ConnectionState.done:
-                            if (snapshot.hasError) {
-                              return Center(
-                                child: Text('Error: ${snapshot.error}'),
-                              );
-                            }
-
-                            if (!snapshot.hasData) {
-                              return const Center(
-                                child: Text('No messages found'),
-                              );
-                            }
-
-                            final messagesStream = snapshot.data!;
-
-                            return StreamBuilder<
-                                QuerySnapshot<Map<String, dynamic>>>(
-                              stream: messagesStream,
-                              builder: (context, streamSnapshot) {
-                                switch (streamSnapshot.connectionState) {
-                                  case ConnectionState.waiting:
-                                  case ConnectionState.none:
-                                    return const Center(
-                                      child: CircularProgressIndicator(),
-                                    );
-
-                                  case ConnectionState.active:
-                                  case ConnectionState.done:
-                                    if (streamSnapshot.hasError) {
-                                      return Center(
-                                        child: Text(
-                                            'Error: ${streamSnapshot.error}'),
-                                      );
-                                    }
-
-                                    if (!streamSnapshot.hasData ||
-                                        streamSnapshot.data!.docs.isEmpty) {
-                                      return const Center(
-                                        child: Text('Say Hi! 👋🏻'),
-                                      );
-                                    }
-
-                                    final messages = streamSnapshot.data!.docs
-                                        .map((e) => Message.fromJson(e.data()))
-                                        .toList();
-
-                                    return ListView.builder(
-                                      shrinkWrap: true,
-                                      itemCount: messages.length,
-                                      itemBuilder: (context, index) {
-                                        return MessageCard(
-                                          message: messages[index],
-                                        );
-                                      },
-                                    );
-                                }
-                              },
-                            );
-                        }
-                      }),
+                Text(
+                  widget.otherUserName,
+                  style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF1A1A2E),
+                      fontFamily: 'Hind'),
                 ),
-                _chatInput(),
-                if (_showemoji)
-                  SizedBox(
-                    height: 240,
-                    child: EmojiPicker(
-                      textEditingController: _textController,
-                      config: const Config(
-                          categoryViewConfig: CategoryViewConfig(),
-                          emojiViewConfig: EmojiViewConfig(columns: 8),
-                          bottomActionBarConfig:
-                              BottomActionBarConfig(enabled: false)),
-                    ),
-                  )
+                const Text('Online',
+                    style:
+                        TextStyle(fontSize: 11, color: Color(0xFF34C759))),
               ],
             ),
-          ),
+          ],
         ),
       ),
-    );
-  }
-
-  Widget _appBar() {
-    return InkWell(
-      onTap: () {
-        // print(widget.user);
-      },
-      child: Row(
+      body: Column(
         children: [
-          IconButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-              icon: const Icon(
-                Icons.arrow_back,
-                color: Colors.black54,
-              )),
-          ClipRRect(
-              borderRadius: BorderRadius.circular(20),
-              child: const Icon(Icons.person_rounded,
-                  size: 32, color: Color.fromARGB(255, 69, 69, 239))
-              // CachedNetworkImage(
-              //   width: 39,
-              //   height: 39,
-              //   imageUrl: widget.user.image,
-              //   fit: BoxFit.cover,
-              //   errorWidget: (context, url, error) =>
-              //       const CircleAvatar(child: Icon(CupertinoIcons.person)),
-              // ),
-              ),
-          const SizedBox(
-            width: 10,
+          Expanded(
+            child: messages.isEmpty
+                ? const Center(
+                    child: Text('Say Hi! 👋',
+                        style: TextStyle(
+                            fontSize: 16, color: Color(0xFF8E8E93))),
+                  )
+                : ListView.builder(
+                    controller: _scrollController,
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 12),
+                    itemCount: messages.length,
+                    itemBuilder: (context, index) {
+                      final msg = messages[index];
+                      final isMe = msg.fromId == _currentUserId;
+                      return _MessageBubble(message: msg, isMe: isMe);
+                    },
+                  ),
           ),
-          Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                widget.user.name,
-                style: const TextStyle(
-                    fontSize: 16,
-                    color: Colors.black54,
-                    fontWeight: FontWeight.w500,
-                    fontFamily: 'Hind'),
-              ),
-              // SizedBox(
-              //   height: -2,
-              // ),
-              // const Text(
-              //   'Last seen not available',
-              //   style: TextStyle(
-              //       fontSize: 13, color: Colors.black54, fontFamily: 'Hind'),
-              // ),
-            ],
-          )
+          _buildInput(),
         ],
       ),
     );
   }
 
-  Widget _chatInput() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+  Widget _buildInput() {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
+      color: Colors.white,
       child: Row(
         children: [
           Expanded(
-            child: Card(
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(15)),
-              child: Row(
-                children: [
-                  IconButton(
-                      onPressed: () {
-                        setState(() {
-                          FocusScope.of(context).unfocus();
-                          _showemoji = !_showemoji;
-                        });
-                      },
-                      icon: const Icon(
-                        Icons.emoji_emotions,
-                        color: Color.fromARGB(255, 69, 69, 239),
-                      )),
-                  Expanded(
-                      child: TextField(
-                    controller: _textController,
-                    keyboardType: TextInputType.multiline,
-                    maxLines: null,
-                    onTap: () {
-                      if (_showemoji) {
-                        if (mounted) {
-                          setState(() {
-                            _showemoji = !_showemoji;
-                          });
-                        }
-                      }
-                    },
-                    decoration: const InputDecoration(
-                      hintText: 'Type Something...',
-                      hintStyle:
-                          TextStyle(color: Color.fromARGB(255, 69, 69, 239)),
-                      border: InputBorder.none,
-                    ),
-                  )),
-                  // IconButton(
-                  //     onPressed: () {},
-                  //     icon: Icon(
-                  //       Icons.image,
-                  //       color: Colors.blueAccent,
-                  //     )),
-                  // IconButton(
-                  //     onPressed: () {
-                  //       // API.printUserDetails();
-                  //     },
-                  //     icon: Icon(
-                  //       Icons.camera_alt_rounded,
-                  //       color: Colors.blueAccent,
-                  //     )),
-                ],
+            child: Container(
+              decoration: BoxDecoration(
+                color: const Color(0xFFF2F2F7),
+                borderRadius: BorderRadius.circular(24),
+              ),
+              child: TextField(
+                controller: _textController,
+                maxLines: null,
+                keyboardType: TextInputType.multiline,
+                textInputAction: TextInputAction.newline,
+                style: const TextStyle(
+                    fontSize: 14, color: Color(0xFF1A1A2E)),
+                decoration: const InputDecoration(
+                  hintText: 'Type a message...',
+                  hintStyle:
+                      TextStyle(color: Color(0xFFAAAAAA), fontSize: 14),
+                  border: InputBorder.none,
+                  contentPadding:
+                      EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                ),
               ),
             ),
           ),
-          MaterialButton(
-            onPressed: () {
-              if (_textController.text.isNotEmpty) {
-                // print(widget.user);
-                API.sendMessage(widget.user, _textController.text);
-                _textController.clear();
-              }
-            },
-            minWidth: 0,
-            padding:
-                const EdgeInsets.only(top: 10, bottom: 10, right: 5, left: 10),
-            color: Colors.green,
-            shape: const CircleBorder(),
-            child: const Icon(Icons.send),
-          )
+          const SizedBox(width: 10),
+          GestureDetector(
+            onTap: _sendMessage,
+            child: Container(
+              padding: const EdgeInsets.all(12),
+              decoration: const BoxDecoration(
+                color: Color(0xFF6246EA),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.send_rounded,
+                  color: Colors.white, size: 20),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MessageBubble extends StatelessWidget {
+  final LocalMessage message;
+  final bool isMe;
+  const _MessageBubble({required this.message, required this.isMe});
+
+  @override
+  Widget build(BuildContext context) {
+    final time =
+        '${message.sentAt.hour.toString().padLeft(2, '0')}:${message.sentAt.minute.toString().padLeft(2, '0')}';
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        mainAxisAlignment:
+            isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          if (!isMe) ...[
+            CircleAvatar(
+              radius: 14,
+              backgroundColor: const Color(0xFF6246EA).withValues(alpha: 0.15),
+              child: const Icon(Icons.person_rounded,
+                  size: 16, color: Color(0xFF6246EA)),
+            ),
+            const SizedBox(width: 6),
+          ],
+          Column(
+            crossAxisAlignment:
+                isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+            children: [
+              Container(
+                constraints: BoxConstraints(
+                  maxWidth: MediaQuery.of(context).size.width * 0.65,
+                ),
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 14, vertical: 10),
+                decoration: BoxDecoration(
+                  color: isMe
+                      ? const Color(0xFF6246EA)
+                      : Colors.white,
+                  borderRadius: BorderRadius.only(
+                    topLeft: const Radius.circular(18),
+                    topRight: const Radius.circular(18),
+                    bottomLeft: Radius.circular(isMe ? 18 : 4),
+                    bottomRight: Radius.circular(isMe ? 4 : 18),
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.06),
+                      blurRadius: 6,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Text(
+                  message.msg,
+                  style: TextStyle(
+                    color: isMe ? Colors.white : const Color(0xFF1A1A2E),
+                    fontSize: 14,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                time,
+                style: const TextStyle(
+                    fontSize: 10, color: Color(0xFF8E8E93)),
+              ),
+            ],
+          ),
+          if (isMe) const SizedBox(width: 6),
         ],
       ),
     );

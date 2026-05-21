@@ -1,23 +1,8 @@
-// ignore_for_file: prefer_const_constructors, prefer_const_literals_to_create_immutables
-
-import 'dart:convert';
-
-import 'package:another_carousel_pro/another_carousel_pro.dart';
 import 'package:flutter/material.dart';
-// import 'package:get/get.dart';
-// import 'package:flutter_rating_bar/flutter_rating_bar.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
-import 'package:hello_world/constant.dart';
-// import 'package:hello_world/models/api_response.dart';
+import 'package:hello_world/data/dummy_data.dart';
 import 'package:hello_world/models/property.dart';
-import 'package:hello_world/services/property_functions.dart';
-import 'package:hello_world/services/user_service.dart';
-import 'package:razorpay_flutter/razorpay_flutter.dart';
+import 'package:hello_world/pages/chat_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:http/http.dart' as http;
-import '../helper/dialogs.dart';
-import '../models/chat_user.dart';
-import 'chat_screen.dart';
 
 class PropertyMainScreen extends StatefulWidget {
   final Property property;
@@ -28,731 +13,580 @@ class PropertyMainScreen extends StatefulWidget {
 }
 
 class _PropertyMainScreenState extends State<PropertyMainScreen> {
-  Property? propertyNew;
-  bool isLoading = true;
-  String? errorMessage;
-  bool isFav = false;
-  int? userId;
-  String? mail;
-  String? phoneNo;
-  //  Future<int> _userId = ;
-  late Razorpay _razorpay;
-  // static const String _razorpayKey = 'rzp_test_NRUeeNsMSYtl4x';
-  static const String _razorpayKey = 'rzp_live_yNTs8q4TxSKx67';
+  bool _isFav = false;
+  int _currentImageIndex = 0;
+  int _currentUserId = 0;
+  final PageController _pageController = PageController();
+
+  static const List<List<Color>> _gradients = [
+    [Color(0xFF667EEA), Color(0xFF764BA2)],
+    [Color(0xFF11998E), Color(0xFF38EF7D)],
+    [Color(0xFFF7971E), Color(0xFFFFD200)],
+    [Color(0xFFEB3349), Color(0xFFF45C43)],
+    [Color(0xFF2193B0), Color(0xFF6DD5ED)],
+    [Color(0xFF834D9B), Color(0xFFD04ED6)],
+  ];
 
   @override
   void initState() {
     super.initState();
-    fetchProperty();
-    loadUserId();
-    loadEmail();
-    loadphone();
-    _razorpay = Razorpay();
-    _razorpay.on(Razorpay.EVENT_PAYMENT_SUCCESS, _handlePaymentSuccess);
-    _razorpay.on(Razorpay.EVENT_PAYMENT_ERROR, _handlePaymentError);
-    _razorpay.on(Razorpay.EVENT_EXTERNAL_WALLET, _handleExternalWallet);
+    _isFav = widget.property.isFav ?? false;
+    _loadCurrentUser();
   }
 
   @override
   void dispose() {
+    _pageController.dispose();
     super.dispose();
-    _razorpay.clear();
   }
 
-  void _handlePaymentSuccess(PaymentSuccessResponse response) async {
-    Dialogs.showProgressBar(context);
-    final result = await _verifyPayment(
-      response.orderId!,
-      response.paymentId!,
-      response.signature!,
-    );
+  Future<void> _loadCurrentUser() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (mounted) setState(() => _currentUserId = prefs.getInt('userId') ?? 0);
+  }
 
-    if (result) {
-      // print('Payment Success: ${DateTime.now()}');
-      final int price = int.parse(propertyNew!.price!);
-      final apiResponse = await bookProp(
-          userId.toString(),
-          widget.property.id.toString(),
-          response.orderId!,
-          response.paymentId!,
-          price);
-
-      if (apiResponse.error == null) {
-        if (mounted) {
-          final scaffoldMessenger = ScaffoldMessenger.of(context);
-          Navigator.pop(context);
-          scaffoldMessenger.showSnackBar(
-            SnackBar(
-              content: Text('Property Booked'),
-              backgroundColor: Color(0xFF6246EA),
-            ),
-          );
-        }
-      } else {
-        if (mounted) {
-          Dialogs.showSnackbar(context, 'Payment failed, please try again.',
-              backgroundColor: Colors.red);
-        }
-      }
-    } else {
-      if (mounted) {
-        Dialogs.showSnackbar(context, 'Payment failed, please try again.',
-            backgroundColor: Colors.red);
-      }
+  String get _propertyTypeLabel {
+    switch (widget.property.propertyTypeId) {
+      case '1':
+        return 'Apartment';
+      case '2':
+        return 'Studio';
+      case '3':
+        return 'Villa';
+      case '4':
+        return 'Room Share';
+      default:
+        return 'Property';
     }
   }
 
-  void _paylater(int userId, int amount, int propId) async {
-    // print(userId);
-    // print(propId);
-    // print(amount);
-    final int price = int.parse(propertyNew!.price!);
-    final apiResponse = await payLaterBookProp(
-        userId,
-        widget.property.id,
-        // response.orderId!,
-        // response.paymentId!,
-        amount);
+  List<Color> get _gradient =>
+      _gradients[widget.property.id % _gradients.length];
 
-    if (apiResponse.error == null) {
-      if (mounted) {
-        final scaffoldMessenger = ScaffoldMessenger.of(context);
-        Navigator.pop(context);
-        scaffoldMessenger.showSnackBar(
-          SnackBar(
-            content: Text('Property Booked'),
-            backgroundColor: Color(0xFF6246EA),
+  void _openChatWithOwner() {
+    final ownerUserId = int.tryParse(widget.property.userId ?? '1') ?? 1;
+    final owner = DummyData.getUserById(ownerUserId);
+    if (owner == null) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => LocalChatScreen(
+          otherUserId: ownerUserId,
+          otherUserName: owner.name ?? 'Owner',
+        ),
+      ),
+    );
+  }
+
+  void _showBookingDialog() {
+    final price = widget.property.price ?? '0';
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Book Property',
+            style: TextStyle(
+                fontFamily: 'Hind',
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF1A1A2E))),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(widget.property.title,
+                style: const TextStyle(
+                    fontSize: 15, color: Color(0xFF555555))),
+            const SizedBox(height: 8),
+            Text('Monthly Rent: Rs $price',
+                style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF6246EA))),
+            const SizedBox(height: 12),
+            const Text('Choose a payment option:',
+                style: TextStyle(color: Color(0xFF8E8E93), fontSize: 13)),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _confirmBooking('Pay at Property');
+            },
+            child: const Text('Pay at Property',
+                style: TextStyle(color: Color(0xFF8E8E93))),
           ),
-        );
-      }
-    } else {
-      if (mounted) {
-        Dialogs.showSnackbar(context, 'Payment failed, please try again.',
-            backgroundColor: Colors.red);
-      }
-    }
-  }
-
-  void _handlePaymentError(PaymentFailureResponse response) {
-    print('Payment Error: ${response.code} - ${response.message}');
-    Dialogs.showSnackbar(context, 'Payment failed, please try again.',
-        backgroundColor: Colors.red);
-  }
-
-  void _handleExternalWallet(ExternalWalletResponse response) {
-    print('External Wallet: ${response.walletName}');
-  }
-
-  Future<void> _createOrder(int amount) async {
-    Navigator.of(context).pop();
-    Dialogs.showProgressBar(context);
-    final response = await http.post(
-      Uri.parse('$baseURL/create-order'),
-      body: jsonEncode({'amount': amount}),
-      headers: {'Content-Type': 'application/json'},
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _confirmBooking('Pay Now');
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF6246EA),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8)),
+            ),
+            child: const Text('Pay Now',
+                style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
     );
-    // print(response.toString());
-    if (response.statusCode == 200) {
-      final orderData = jsonDecode(response.body);
-      _openCheckout(orderData['order_id'], orderData['amount']);
-    } else {
-      if (mounted) {
-        Navigator.of(context).pop();
-        Dialogs.showSnackbar(
-            context, 'Oops, something went wrong. Please try again.');
-      }
-    }
   }
 
-  Future<bool> _verifyPayment(
-      String orderId, String paymentId, String signature) async {
-    final response = await http.post(
-      Uri.parse('$baseURL/verify-payment'),
-      body: jsonEncode({
-        'razorpay_order_id': orderId,
-        'razorpay_payment_id': paymentId,
-        'razorpay_signature': signature,
-      }),
-      headers: {'Content-Type': 'application/json'},
+  void _confirmBooking(String method) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Property booked successfully! ($method)'),
+        backgroundColor: const Color(0xFF6246EA),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
     );
-
-    final responseData = jsonDecode(response.body);
-    return responseData['status'] == 'success';
   }
-
-  void _openCheckout(String orderId, int amount) {
-    print('ohonne: $phoneNo');
-    var options = {
-      'key': _razorpayKey,
-      'amount': amount,
-      'name': 'Ghorbhara',
-      'order_id': orderId,
-      'description': 'Ghorbhara',
-      'prefill': {'contact': phoneNo, 'email': mail!},
-      // 'external': {
-      //   'wallets': ['paytm']
-      // }
-    };
-
-    try {
-      if (mounted) {
-        Navigator.of(context).pop();
-      }
-      _razorpay.open(options);
-    } catch (e) {
-      print('Error: $e');
-    }
-  }
-
-  static Marker _kMarker = Marker(
-    markerId: MarkerId('_kGooglePlexMarker'),
-    position: LatLng(37.42796133580664, -122.085749655962),
-    // position: LatLng(37.42796133580664, -122.085749655962),
-    infoWindow:
-        InfoWindow(title: 'Google Plex', snippet: 'Google Headquarters'),
-  );
-
-  Future<void> favToogle() async {
-    if (userId == null) {
-      return;
-    }
-    if (!isFav) {
-      final apiResponse =
-          await add_to_fav(prop_id: widget.property.id, user_id: userId!);
-      if (apiResponse.error == null) {
-        if (mounted) {
-          setState(() {
-            isFav = true;
-            widget.property.isFav = true;
-            // print(widget.property.isFav);
-          });
-        }
-      }
-    } else {
-      final apiResponse =
-          await remove_fav(prop_id: widget.property.id, user_id: userId!);
-      if (apiResponse.error == null) {
-        if (mounted) {
-          setState(() {
-            isFav = false;
-            widget.property.isFav = false;
-            // print(widget.property.isFav);
-          });
-        }
-      }
-    }
-  }
-
-  Future<void> loadUserId() async {
-    userId = await getUserId();
-    // Perform any other initializations that depend on userId here
-  }
-
-  Future<void> loadEmail() async {
-    mail = await getEmail();
-    // Perform any other initializations that depend on userId here
-  }
-
-  Future<void> loadphone() async {
-    phoneNo = await getPhone();
-    // Perform any other initializations that depend on userId here
-  }
-
-  Future<void> fetchProperty() async {
-    try {
-      SharedPreferences pref = await SharedPreferences.getInstance();
-      int? id = pref.getInt('userId');
-
-      final apiResponse = await get_one_property(widget.property.id, id!);
-      if (apiResponse.error == null) {
-        if (mounted) {
-          setState(() {
-            propertyNew = apiResponse.data as Property;
-            isLoading = false;
-            isFav = propertyNew!.isFav!;
-            print(isFav);
-            print(propertyNew);
-
-            _kGooglePlex = CameraPosition(
-              target: LatLng(double.parse(propertyNew!.location!.lat!),
-                  double.parse(propertyNew!.location!.long!)),
-              zoom: 14.4746,
-            );
-
-            _kMarker = Marker(
-              markerId: MarkerId('_kGooglePlexMarker'),
-              position: LatLng(double.parse(propertyNew!.location!.lat!),
-                  double.parse(propertyNew!.location!.long!)),
-              infoWindow: InfoWindow(
-                  title: propertyNew!.title,
-                  snippet: propertyNew!.location!.location),
-            );
-          });
-          // print('Property Location: $propertyNew');
-        }
-      } else {
-        setState(() {
-          errorMessage = 'Error fetching properties';
-          isLoading = false;
-        });
-      }
-    } catch (e) {
-      setState(() {
-        errorMessage = 'Error: $e';
-        isLoading = false;
-      });
-    }
-  }
-
-  static CameraPosition _kGooglePlex = const CameraPosition(
-    target: LatLng(37.42796133580664, -122.085749655962),
-    zoom: 14.4746,
-  );
 
   @override
   Widget build(BuildContext context) {
+    final images = DummyData.getPropertyImages(widget.property.id);
+    final ownerUserId = int.tryParse(widget.property.userId ?? '1') ?? 1;
+    final owner = DummyData.getUserById(ownerUserId);
+
     return Scaffold(
-      body: SafeArea(
-        child: isLoading
-            ? Center(child: CircularProgressIndicator())
-            : propertyNew == null
-                ? Center(child: Text(errorMessage ?? 'Something went wrong'))
-                : SingleChildScrollView(
-                    child: Column(
-                      // primary: false,
-                      // shrinkWrap: true,
-                      crossAxisAlignment: CrossAxisAlignment.start,
+      backgroundColor: const Color(0xFFF8F8FF),
+      body: CustomScrollView(
+        slivers: [
+          SliverAppBar(
+            expandedHeight: 300,
+            pinned: true,
+            backgroundColor: _gradient[0],
+            leading: GestureDetector(
+              onTap: () => Navigator.pop(context),
+              child: Container(
+                margin: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.9),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.arrow_back_ios_new_rounded,
+                    color: Color(0xFF6246EA), size: 18),
+              ),
+            ),
+            actions: [
+              GestureDetector(
+                onTap: () => setState(() {
+                  _isFav = !_isFav;
+                  widget.property.isFav = _isFav;
+                }),
+                child: Container(
+                  margin: const EdgeInsets.all(8),
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.9),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    _isFav ? Icons.favorite : Icons.favorite_border,
+                    color: _isFav ? Colors.red : const Color(0xFF6246EA),
+                    size: 20,
+                  ),
+                ),
+              ),
+            ],
+            flexibleSpace: FlexibleSpaceBar(
+              background: Stack(
+                children: [
+                  PageView.builder(
+                    controller: _pageController,
+                    itemCount: images.length,
+                    onPageChanged: (i) =>
+                        setState(() => _currentImageIndex = i),
+                    itemBuilder: (context, index) => Image.network(
+                      images[index],
+                      fit: BoxFit.cover,
+                      width: double.infinity,
+                      errorBuilder: (_, __, ___) => Container(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: _gradient,
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                        ),
+                        child: const Center(
+                          child: Icon(Icons.home_rounded,
+                              size: 80, color: Colors.white54),
+                        ),
+                      ),
+                    ),
+                  ),
+                  if (images.length > 1)
+                    Positioned(
+                      bottom: 12,
+                      left: 0,
+                      right: 0,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: List.generate(
+                          images.length,
+                          (i) => AnimatedContainer(
+                            duration: const Duration(milliseconds: 200),
+                            margin: const EdgeInsets.symmetric(horizontal: 3),
+                            width: _currentImageIndex == i ? 16 : 6,
+                            height: 6,
+                            decoration: BoxDecoration(
+                              color: _currentImageIndex == i
+                                  ? Colors.white
+                                  : Colors.white54,
+                              borderRadius: BorderRadius.circular(3),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: _gradient[0].withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          _propertyTypeLabel,
+                          style: TextStyle(
+                              color: _gradient[0],
+                              fontWeight: FontWeight.w600,
+                              fontSize: 12),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    widget.property.title,
+                    style: const TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w800,
+                      color: Color(0xFF1A1A2E),
+                      fontFamily: 'Hind',
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      const Icon(Icons.location_on,
+                          color: Color(0xFF6246EA), size: 16),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          widget.property.location?.location ??
+                              widget.property.address,
+                          style: const TextStyle(
+                              color: Color(0xFF8E8E93), fontSize: 14),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+                  Row(
+                    children: [
+                      _statChip(Icons.bed_outlined,
+                          '${widget.property.rooms} Rooms'),
+                      const SizedBox(width: 12),
+                      _statChip(Icons.square_foot_rounded,
+                          '${widget.property.area} m²'),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+                  _sectionTitle('Owner'),
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(14),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.05),
+                          blurRadius: 10,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Row(
                       children: [
-                        Container(
-                          height: 300,
-                          child: Stack(
+                        CircleAvatar(
+                          radius: 24,
+                          backgroundColor:
+                              _gradient[0].withValues(alpha: 0.15),
+                          child: Text(
+                            (owner?.name ?? 'O')[0].toUpperCase(),
+                            style: TextStyle(
+                              color: _gradient[0],
+                              fontWeight: FontWeight.w700,
+                              fontSize: 18,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Container(
-                                width: MediaQuery.of(context).size.width,
-                                height: 300,
-                                //image slider package to display property images
-                                child: AnotherCarousel(
-                                  boxFit: BoxFit.contain,
-                                  autoplay: false,
-                                  dotSize: 8.0,
-                                  dotSpacing: 18,
-                                  dotIncreaseSize: 1.5,
-                                  dotIncreasedColor:
-                                      Color.fromARGB(255, 98, 70, 234),
-                                  dotColor: Color.fromARGB(255, 128, 108, 226),
-                                  dotBgColor: Colors.transparent,
-                                  dotPosition: DotPosition.bottomCenter,
-                                  dotVerticalPadding: 10.0,
-                                  showIndicator: true,
-                                  indicatorBgPadding: 7.0,
-                                  images: propertyNew?.images?.map((image) {
-                                        return NetworkImage(
-                                            '${baseUrl}${image.imagePath}');
-                                      }).toList() ??
-                                      [],
+                              Text(
+                                owner?.name ?? 'Property Owner',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 15,
+                                  color: Color(0xFF1A1A2E),
                                 ),
                               ),
-                              Positioned(
-                                top: 0,
-                                left: 0,
-                                right: 0,
-                                child: AppBar(
-                                  title: Text(''),
-                                  backgroundColor: Colors.transparent,
-                                  elevation: 0,
-                                ),
+                              const Text(
+                                'Property Owner',
+                                style: TextStyle(
+                                    color: Color(0xFF8E8E93), fontSize: 12),
                               ),
                             ],
                           ),
                         ),
-                        Container(
-                          // color: Colors.amber,
-                          child: Padding(
-                            padding: EdgeInsets.only(
-                                left: 21, right: 21, top: 21, bottom: 14),
-                            child: Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Flexible(
-                                    child: Text(
-                                      propertyNew!.title,
-                                      style: TextStyle(
-                                        fontFamily: 'Hind',
-                                        fontSize: 20,
-                                        fontWeight: FontWeight.w400,
-                                        height: 1.3,
-                                      ),
-                                    ),
-                                  ),
-                                  SizedBox(
-                                    width: 50,
-                                  ),
-                                  IconButton(
-                                    onPressed: favToogle,
-                                    icon: Icon(
-                                      isFav
-                                          ? Icons.favorite
-                                          : Icons.favorite_border,
-                                      color: isFav ? Colors.red[800] : null,
-                                    ),
-                                  )
-                                ]),
-                          ),
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.only(
-                              top: 0, left: 21, right: 54),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Container(
-                                child: Row(children: [
-                                  Icon(
-                                    Icons.house,
-                                    color: Colors.grey,
-                                  ),
-                                  SizedBox(
-                                    width: 8,
-                                  ),
-                                  Text(
-                                    '${propertyNew?.area} m2',
-                                    style: TextStyle(color: Colors.grey),
-                                  )
-                                ]),
-                              ),
-                              // Container(
-                              //   child: Row(children: [
-                              //     Icon(
-                              //       Icons.star,
-                              //       color: Colors.amber,
-                              //     ),
-                              //     SizedBox(
-                              //       width: 8,
-                              //     ),
-                              //     Text(
-                              //       "4.1 (66 reviews)",
-                              //       style: TextStyle(color: Colors.grey),
-                              //     )
-                              //   ]),
-                              // ),
-                              Container(
-                                child: Row(children: [
-                                  Icon(
-                                    Icons.bed_outlined,
-                                    color: Colors.grey,
-                                  ),
-                                  SizedBox(
-                                    width: 8,
-                                  ),
-                                  Text(
-                                    '${propertyNew?.rooms} room',
-                                    style: TextStyle(color: Colors.grey),
-                                  )
-                                ]),
-                              )
-                            ],
-                          ),
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.only(
-                              top: 8.0, left: 21, right: 54),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Container(
-                                child: Row(children: [
-                                  Icon(
-                                    Icons.location_on,
-                                    color: Colors.grey,
-                                  ),
-                                  SizedBox(
-                                    width: 8,
-                                  ),
-                                  Text(
-                                    propertyNew!.location?.location ??
-                                        'Location Unavailable',
-                                    style: TextStyle(color: Colors.grey),
-                                  )
-                                ]),
-                              ),
-                            ],
-                          ),
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.only(
-                              left: 21, right: 0, bottom: 0, top: 22),
-                          child: Row(
-                            // mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              CircleAvatar(
-                                child: Icon(Icons.person_rounded,
-                                    size: 32,
-                                    color: const Color.fromARGB(
-                                        255, 116, 116, 117)),
-                              ),
-                              SizedBox(width: 12),
-                              Column(
-                                mainAxisAlignment: MainAxisAlignment.start,
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    '${propertyNew?.user?.name}',
-                                    textAlign: TextAlign.left,
-                                  ),
-                                  Text(
-                                    "Property owner",
-                                    style: TextStyle(
-                                        color: Colors.grey, fontSize: 10),
-                                  )
-                                ],
-                              ),
-                              SizedBox(width: 150),
-                              IconButton(
-                                onPressed: () async {
-                                  try {
-                                    // Fetch user details
-                                    var userDoc = await API.getUserById(
-                                        propertyNew!.user!.google_id!);
-
-                                    // Convert to ChatUser
-                                    var chatUser =
-                                        ChatUser.fromJson(userDoc.data()!);
-
-                                    // Navigate to ChatScreen
-                                    if (mounted) {
-                                      Navigator.push(
-                                        context,
-                                        MaterialPageRoute(
-                                          builder: (_) =>
-                                              ChatScreen(user: chatUser),
-                                        ),
-                                      );
-                                    }
-                                  } catch (e) {}
-                                },
-                                icon: Icon(
-                                  Icons.message,
-                                  // size: 22,
-                                  color: Colors.grey,
-                                ),
-                              )
-                            ],
-                          ),
-                        ),
-                        propertyNew?.homeFacilities != null
-                            ? Column(
-                                children: [
-                                  Padding(
-                                    padding: EdgeInsets.only(
-                                        left: 21,
-                                        right: 21,
-                                        top: 12,
-                                        bottom: 12),
-                                    child: Row(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.spaceBetween,
-                                      children: [
-                                        Text(
-                                          "Features & Amenities",
-                                          style: TextStyle(
-                                              fontWeight: FontWeight.w600,
-                                              fontFamily: 'Hind',
-                                              fontSize: 18),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  Container(
-                                    child: ListView.builder(
-                                      shrinkWrap: true,
-                                      physics: NeverScrollableScrollPhysics(),
-                                      itemCount:
-                                          propertyNew!.homeFacilities?.length ??
-                                              0,
-                                      itemBuilder: (context, index) {
-                                        // Safely access the facility string
-                                        final facility = propertyNew!
-                                                .homeFacilities?[index]
-                                                .facility
-                                                .facility ??
-                                            'Unknown Facility';
-
-                                        return Padding(
-                                          padding: EdgeInsets.fromLTRB(
-                                              21, 0, 21, 12),
-                                          child: Row(
-                                            children: [
-                                              Icon(
-                                                Icons.check_circle_outlined,
-                                                color: Colors.grey[400],
-                                              ),
-                                              SizedBox(
-                                                width: 8,
-                                              ),
-                                              Text(
-                                                facility,
-                                                style: TextStyle(
-                                                  fontFamily: 'Hind',
-                                                  fontSize: 16,
-                                                  color: Colors.grey[850],
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        );
-                                      },
-                                    ),
-                                  ),
-                                ],
-                              )
-                            : SizedBox
-                                .shrink(), // Or any other widget you want to display when homeFacilities is null
-
-                        Padding(
-                          padding: const EdgeInsets.only(
-                              left: 21, right: 21, top: 14, bottom: 0),
-                          child: Text(
-                            "About This Home",
-                            // "About location's neighborhood",
-                            style: TextStyle(
-                                fontWeight: FontWeight.w700,
-                                fontFamily: 'Hind',
-                                fontSize: 18),
-                          ),
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.only(
-                              left: 21, right: 21, top: 8, bottom: 0),
-                          child: Text(
-                            propertyNew!.about,
-                            style: TextStyle(
-                                fontFamily: 'Hind',
-                                fontSize: 16,
-                                color: Colors.grey),
-                          ),
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.only(
-                              left: 21, right: 21, top: 14, bottom: 0),
-                          child: Text(
-                            "Location",
-                            // "About location's neighborhood",
-                            style: TextStyle(
-                                fontWeight: FontWeight.w700,
-                                fontFamily: 'Hind',
-                                fontSize: 18),
-                          ),
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.only(
-                              left: 21, right: 21, top: 8, bottom: 0),
+                        GestureDetector(
+                          onTap: _currentUserId != ownerUserId
+                              ? _openChatWithOwner
+                              : null,
                           child: Container(
-                            height: 200,
-                            width: 350,
-                            child: GoogleMap(
-                              initialCameraPosition: _kGooglePlex,
-                              zoomControlsEnabled: false,
-                              scrollGesturesEnabled: false,
-                              zoomGesturesEnabled: false,
-                              tiltGesturesEnabled: false,
-                              rotateGesturesEnabled: false,
-                              markers: {_kMarker},
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: _currentUserId != ownerUserId
+                                  ? const Color(0xFF6246EA)
+                                  : Colors.grey[200],
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Icon(
+                              Icons.chat_bubble_outline_rounded,
+                              color: _currentUserId != ownerUserId
+                                  ? Colors.white
+                                  : Colors.grey,
+                              size: 18,
                             ),
                           ),
                         ),
-
-                        Padding(
-                          padding: const EdgeInsets.only(
-                              left: 21, right: 21, top: 22, bottom: 0),
-                          child: GestureDetector(
-                            onTap: () {
-                              // Add your button tap logic here
-                              // print("Button tapped!");
-                            },
-                            child: Container(
-                              padding: EdgeInsets.all(16),
-                              decoration: BoxDecoration(
-                                color: Color(0xFF6246EA),
-                                borderRadius: BorderRadius.circular(28),
-                              ),
-                              child: GestureDetector(
-                                onTap: () {
-                                  showDialog(
-                                    context: context,
-                                    builder: (BuildContext context) {
-                                      return AlertDialog(
-                                        // alignment: Alignment.center,
-                                        // title: Text('Payment Options'),
-                                        content: Text(
-                                          'Choose a payment option:',
-                                          style: TextStyle(
-                                              // color: Colors.white,
-                                              fontFamily: 'Hind',
-                                              fontWeight: FontWeight.w700),
-                                        ),
-                                        actions: [
-                                          TextButton(
-                                            onPressed: () {
-                                              if (propertyNew != null &&
-                                                  propertyNew!.price != null) {
-                                                final int price = int.parse(
-                                                    propertyNew!.price!);
-
-                                                _createOrder(
-                                                    price); // Pass the amount you want to charge
-                                              } else {
-                                                print('Price is null');
-                                              }
-                                            },
-                                            child: Text('Pay Now'),
-                                          ),
-                                          TextButton(
-                                            onPressed: () {
-                                              Navigator.of(context).pop();
-                                              // Handle "Pay Later" action here
-                                              final int price = int.parse(
-                                                  propertyNew!.price!);
-                                              _paylater(userId!, price,
-                                                  propertyNew!.id!);
-                                              // print('Pay Later selected');
-                                            },
-                                            child: Text('Pay at Property'),
-                                          ),
-                                        ],
-                                      );
-                                    },
-                                  );
-                                },
-                                child: Row(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Text(
-                                      "Monthly Lease",
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                    Text(
-                                      "Rs${propertyNew!.price}/month",
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                        SizedBox(
-                          height: 32,
-                        )
                       ],
                     ),
                   ),
+                  if (widget.property.homeFacilities != null &&
+                      widget.property.homeFacilities!.isNotEmpty) ...[
+                    const SizedBox(height: 24),
+                    _sectionTitle('Features & Amenities'),
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: widget.property.homeFacilities!
+                          .map((hf) => _facilityChip(hf.facility.facility))
+                          .toList(),
+                    ),
+                  ],
+                  const SizedBox(height: 24),
+                  _sectionTitle('About This Home'),
+                  const SizedBox(height: 10),
+                  Text(
+                    widget.property.about,
+                    style: const TextStyle(
+                      color: Color(0xFF555555),
+                      fontSize: 14,
+                      height: 1.6,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  _sectionTitle('Location'),
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(14),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.05),
+                          blurRadius: 10,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF6246EA).withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Icon(Icons.location_on,
+                              color: Color(0xFF6246EA), size: 20),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                widget.property.location?.location ??
+                                    'Location',
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                    color: Color(0xFF1A1A2E),
+                                    fontSize: 14),
+                              ),
+                              Text(
+                                widget.property.address,
+                                style: const TextStyle(
+                                    color: Color(0xFF8E8E93), fontSize: 12),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 100),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+      bottomNavigationBar: Container(
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.08),
+              blurRadius: 20,
+              offset: const Offset(0, -4),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Monthly Rent',
+                      style: TextStyle(
+                          color: Color(0xFF8E8E93), fontSize: 12)),
+                  Text(
+                    'Rs ${widget.property.price ?? "N/A"}',
+                    style: const TextStyle(
+                      color: Color(0xFF6246EA),
+                      fontSize: 22,
+                      fontWeight: FontWeight.w800,
+                      fontFamily: 'Hind',
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            ElevatedButton(
+              onPressed: _showBookingDialog,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF6246EA),
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 28, vertical: 14),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14)),
+                elevation: 0,
+              ),
+              child: const Text(
+                'Book Now',
+                style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 15),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _sectionTitle(String title) {
+    return Text(
+      title,
+      style: const TextStyle(
+        fontSize: 18,
+        fontWeight: FontWeight.w700,
+        color: Color(0xFF1A1A2E),
+        fontFamily: 'Hind',
+      ),
+    );
+  }
+
+  Widget _statChip(IconData icon, String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 16, color: const Color(0xFF6246EA)),
+          const SizedBox(width: 6),
+          Text(label,
+              style: const TextStyle(
+                  color: Color(0xFF555555),
+                  fontWeight: FontWeight.w500,
+                  fontSize: 13)),
+        ],
+      ),
+    );
+  }
+
+  Widget _facilityChip(String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: const Color(0xFF6246EA).withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+            color: const Color(0xFF6246EA).withValues(alpha: 0.2)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.check_circle_rounded,
+              size: 14, color: Color(0xFF6246EA)),
+          const SizedBox(width: 5),
+          Text(
+            label,
+            style: const TextStyle(
+                color: Color(0xFF6246EA),
+                fontSize: 12,
+                fontWeight: FontWeight.w500),
+          ),
+        ],
       ),
     );
   }

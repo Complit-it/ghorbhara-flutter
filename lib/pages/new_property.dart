@@ -1,27 +1,5 @@
-// ignore_for_file: prefer_const_constructors, prefer_const_literals_to_create_immutables, unused_field, prefer_final_fields
-
 import 'package:flutter/material.dart';
-import 'package:dotted_border/dotted_border.dart';
-// import 'package:hello_world/data/property_type.dart';
-import 'package:hello_world/data/room.dart';
-import 'package:hello_world/models/api_response.dart';
-import 'package:hello_world/models/location.dart';
-import 'package:http/http.dart' as http;
-import 'package:hello_world/models/options.dart';
-import 'package:hello_world/pages/components/location_container.dart';
-import 'package:hello_world/pages/components/reusables/form_fields.dart';
-import 'package:hello_world/services/location_function.dart';
-import 'package:hello_world/services/property_functions.dart';
-import 'package:dropdown_button2/dropdown_button2.dart';
-import 'package:hello_world/services/user_service.dart';
 import 'package:image_picker/image_picker.dart';
-import 'dart:io';
-import 'dart:convert';
-// import 'dart:io';
-import 'package:multi_select_flutter/dialog/multi_select_dialog_field.dart';
-
-import '../constant.dart';
-import '../helper/dialogs.dart';
 
 class NewProp extends StatefulWidget {
   const NewProp({super.key});
@@ -31,780 +9,752 @@ class NewProp extends StatefulWidget {
 }
 
 class _NewPropState extends State<NewProp> {
-  final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
-  List<Options> selectedFac = [];
-  List<PropTypeOptions> selectedPropType = [];
-  bool? isChecked = false;
-  // Options? selectedPropertyType;
-  int? property_type_id;
-  Options? selectedValue;
-  int room_id = 0;
-  bool loading = false;
-  String location = 'Loading...';
-  String? lat;
-  String? long;
-  GlobalKey<FormFieldState<dynamic>> _multiSelectKey =
-      GlobalKey<FormFieldState<dynamic>>();
-  GlobalKey<FormFieldState<dynamic>> _propTypeKey =
-      GlobalKey<FormFieldState<dynamic>>();
+  final _formKey = GlobalKey<FormState>();
 
-  TextEditingController _title = TextEditingController();
-  TextEditingController _address = TextEditingController();
-  TextEditingController _area = TextEditingController();
-  TextEditingController _about = TextEditingController();
-  TextEditingController _price = TextEditingController();
-  final List<XFile> selectedImages = [];
-  bool locationFlag = false;
-  final LocationService _locationService = LocationService();
-  List<Options> propertyTypes = [];
-  Options? selectedPropertyType;
-  int? propertyTypeId;
+  String? _selectedType;
+  String? _selectedRooms;
+  final _titleCtrl = TextEditingController();
+  final _addressCtrl = TextEditingController();
+  final _areaCtrl = TextEditingController();
+  final _aboutCtrl = TextEditingController();
+  final _priceCtrl = TextEditingController();
 
-  void _updateLocation(Map<String, dynamic> locationData) {
-    setState(() {
-      location = locationData['name'];
-      lat = locationData['lat'].toString();
-      long = locationData['lng'].toString();
-      print(lat);
-      print(long);
-    });
-  }
+  final Set<String> _selectedFacilities = {};
+  final List<XFile> _selectedImages = [];
+  bool _agreed = false;
+  bool _submitting = false;
 
-  Future<void> fetchPropertyTypes() async {
-    final response = await http.get(Uri.parse(getPropTypeUrl));
+  static const _propertyTypes = [
+    {'label': 'Apartment', 'icon': Icons.apartment_rounded},
+    {'label': 'Studio', 'icon': Icons.single_bed_rounded},
+    {'label': 'Villa', 'icon': Icons.villa_rounded},
+    {'label': 'Room\nShare', 'icon': Icons.meeting_room_rounded},
+  ];
 
-    if (response.statusCode == 200) {
-      final jsonData = json.decode(response.body);
-      final List<dynamic> data = jsonData['data'];
+  static const _roomOptions = ['1', '2', '3', '4', '5+'];
 
-      setState(() {
-        propertyTypes = data
-            .map((item) => Options(
-                  id: item['id'],
-                  name: item['property_type'],
-                ))
-            .toList();
-      });
-    } else {
-      throw Exception('Failed to load property types');
-    }
-  }
-
-  Future<void> _getLocationData() async {
-    setState(() {
-      location = 'Loading...';
-    });
-    kLocation retrievedAddress = await _locationService.getAddress();
-    if (retrievedAddress.error == null) {
-      if (mounted) {
-        setState(() {
-          location = retrievedAddress.location!; // Update address controller
-          lat = retrievedAddress.lat;
-          long = retrievedAddress.long;
-          locationFlag = true;
-          print(lat);
-          print(long);
-        });
-      }
-      print(_address.text);
-    } else {
-      // Handle location retrieval error (optional)
-      if (mounted) {
-        setState(() {
-          location = retrievedAddress.error!;
-          locationFlag = false;
-          print(retrievedAddress.error);
-          print(locationFlag);
-        });
-      }
-    }
-  }
+  static const _facilities = [
+    {'label': 'WiFi', 'icon': Icons.wifi_rounded},
+    {'label': 'Parking', 'icon': Icons.local_parking_rounded},
+    {'label': 'AC', 'icon': Icons.ac_unit_rounded},
+    {'label': 'Balcony', 'icon': Icons.balcony_rounded},
+    {'label': 'Gym', 'icon': Icons.fitness_center_rounded},
+    {'label': 'Garden', 'icon': Icons.yard_rounded},
+    {'label': 'Furnished', 'icon': Icons.chair_rounded},
+    {'label': 'Security', 'icon': Icons.security_rounded},
+    {'label': 'Pool', 'icon': Icons.pool_rounded},
+    {'label': 'Lift', 'icon': Icons.elevator_rounded},
+  ];
 
   @override
-  void initState() {
-    super.initState();
-    // Call getSubjectData() when the screen is loaded
-    getHomeFacility();
-    // getPropType();
-    fetchPropertyTypes();
-    _getLocationData();
+  void dispose() {
+    _titleCtrl.dispose();
+    _addressCtrl.dispose();
+    _areaCtrl.dispose();
+    _aboutCtrl.dispose();
+    _priceCtrl.dispose();
+    super.dispose();
   }
 
-  Future<void> addImages() async {
+  Future<void> _pickImages() async {
     final picker = ImagePicker();
-    final List<XFile> images = await picker.pickMultiImage(
-      maxWidth: 800, // can be customized
-      maxHeight: 600, // can be customized
-    );
-
-    if (images != null) {
-      for (XFile image in images) {
-        // selectedImages.add(File(image.path));
-        setState(() {
-          selectedImages.add(XFile(image.path));
-        });
-      }
-    }
+    final images = await picker.pickMultiImage(maxWidth: 800, maxHeight: 600);
+    if (images.isNotEmpty) setState(() => _selectedImages.addAll(images));
   }
 
-  save() async {
-    String title = _title.text;
-    String address = _address.text;
-    String area = _area.text;
-    String about = _about.text;
-    int userId = await getUserId();
-    final scaffoldMessenger = ScaffoldMessenger.of(context);
-
-    ApiResponse response = await uploadProperty(
-        selectedImages,
-        title,
-        address,
-        area,
-        about,
-        property_type_id!,
-        room_id!,
-        selectedFac,
-        location,
-        _price.text,
-        userId,
-        lat,
-        long);
-
-    if (response.error == null) {
-      setState(() {
-        loading = false;
-        selectedImages.clear();
-        _title.clear();
-        _about.clear();
-        _area.clear();
-        _address.clear();
-        _price.clear();
-        selectedPropertyType = null;
-        property_type_id = null;
-        isChecked = false;
-        selectedFac.clear();
-        _multiSelectKey = GlobalKey<FormFieldState<dynamic>>();
-        // print(selectedFac);
-      });
-      // scaffoldMessenger.showSnackBar(
-      // SnackBar(
-      //   content: Text('Property enlisted successfully.'),
-      //   // backgroundColor: Colors.red,
-      // ),
-      if (mounted) {
-        Dialogs.showSnackbar(context, 'Property enlisted successfully.',
-            backgroundColor: Colors.green);
-      }
-      // );
-    } else {
-      setState(() {
-        loading = false;
-      });
-      // scaffoldMessenger.showSnackBar(
-      //   SnackBar(
-      //     content: Text('Something went wrong.'),
-      //     // backgroundColor: Colors.red,
-      //   ),
-      // );
-      if (mounted) {
-        Dialogs.showSnackbar(context, 'Something went wrong.',
-            backgroundColor: Colors.red);
-      }
+  void _submit() {
+    if (!_formKey.currentState!.validate()) return;
+    if (_selectedType == null) {
+      _showSnack('Please select a property type');
+      return;
     }
+    if (!_agreed) {
+      _showSnack('Please agree to the terms & conditions');
+      return;
+    }
+    setState(() => _submitting = true);
+    Future.delayed(const Duration(milliseconds: 1200), () {
+      if (!mounted) return;
+      setState(() => _submitting = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Row(children: [
+            Icon(Icons.check_circle_rounded, color: Colors.white),
+            SizedBox(width: 10),
+            Text('Property listed successfully!',
+                style: TextStyle(fontWeight: FontWeight.w600)),
+          ]),
+          backgroundColor: const Color(0xFF11998E),
+          behavior: SnackBarBehavior.floating,
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+      );
+      Navigator.pop(context);
+    });
+  }
+
+  void _showSnack(String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(msg),
+      behavior: SnackBarBehavior.floating,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    ));
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: NestedScrollView(
-        headerSliverBuilder: (BuildContext context, bool isScrolled) => [
-          SliverAppBar(
-            toolbarHeight: 28,
-            surfaceTintColor: Colors.transparent,
-            backgroundColor: Colors.white, // Set this to a fixed color
-            floating: true, // Optional: keeps the app bar visible
-            snap: true, // Optional: animates the app bar
-            scrolledUnderElevation: 0,
-            elevation: 0, // Removes any elevation shadow
-          ),
-        ],
-        body: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.only(left: 21, right: 21),
-            child: SingleChildScrollView(
+      backgroundColor: const Color(0xFFF4F5F8),
+      body: CustomScrollView(
+        slivers: [
+          _buildSliverHeader(),
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
               child: Form(
                 key: _formKey,
                 child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Align(
-                          alignment: Alignment.centerLeft,
-                          child: Text(
-                            "List new property",
-                            style: TextStyle(
-                              fontFamily: 'Hind',
-                              fontSize: 36,
-                              fontWeight: FontWeight.w700,
-                              height: 1.0,
-                            ),
-                          )),
-                      Align(
-                          alignment: Alignment.centerLeft,
-                          child: Text(
-                            "List in the market where renter are waiting!",
-                            style: TextStyle(
-                              fontFamily: 'Hind',
-                              fontSize: 16,
-                              // fontWeight: FontWeight.w700,
-                              color: Colors.grey[400],
-                              height: 1.0,
-                            ),
-                          )),
-                      Padding(
-                        padding: const EdgeInsets.only(top: 15.0),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            DropdownButtonHideUnderline(
-                              child: DropdownButton2<Options>(
-                                isExpanded: true,
-                                hint: Row(
-                                  children: [
-                                    // Icon(
-                                    //   Icons.list,
-                                    //   size: 16,
-                                    //   // color: Colors.yellow, // Uncomment if you want a yellow color
-                                    // ),
-                                    SizedBox(width: 4),
-                                    Expanded(
-                                      child: Text(
-                                        'Property Types',
-                                        style: TextStyle(
-                                          fontSize: 14,
-                                          color: Colors.grey[500],
-                                          // fontWeight: FontWeight.bold,
-                                          fontFamily: 'Hind',
-                                          // color: Colors.yellow, // Uncomment if you want a yellow color
-                                        ),
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                items: propertyTypes
-                                    .map((Options propertyType) =>
-                                        DropdownMenuItem<Options>(
-                                          value: propertyType,
-                                          child: Text(
-                                            propertyType.name.toString(),
-                                            style: TextStyle(
-                                              fontSize: 14,
-                                              color: Colors.grey[800],
-                                              fontFamily: 'Hind',
-                                            ),
-                                          ),
-                                        ))
-                                    .toList(),
-                                value: selectedPropertyType,
-                                onChanged: (Options? newValue) {
-                                  // print(newValue?.id);
-                                  setState(() {
-                                    selectedPropertyType = newValue!;
-                                    property_type_id = newValue.id;
-                                  });
-                                },
-                                buttonStyleData: ButtonStyleData(
-                                  height: 50,
-                                  width: 160,
-                                  padding: const EdgeInsets.only(
-                                      left: 14, right: 14),
-                                  decoration: BoxDecoration(
-                                    borderRadius: BorderRadius.circular(14),
-                                    // border: Border.all(color: Colors.black26),
-                                    color: Color.fromARGB(102, 235, 236, 236),
-                                  ),
-                                  // elevation: 1,
-                                ),
-                                iconStyleData: IconStyleData(
-                                  icon: Icon(Icons.arrow_forward_ios_outlined),
-                                  iconEnabledColor: Colors.grey[500],
-                                  iconSize: 14,
-                                ),
-                                dropdownStyleData: DropdownStyleData(
-                                  maxHeight: 200,
-                                  width: 160,
-                                  decoration: BoxDecoration(
-                                    borderRadius: BorderRadius.circular(14),
-                                    color: Colors.grey[300],
-                                  ),
-                                  offset: const Offset(20, 0),
-                                  scrollbarTheme: ScrollbarThemeData(
-                                    radius: const Radius.circular(40),
-                                    thickness:
-                                        MaterialStateProperty.all<double>(6),
-                                    thumbVisibility:
-                                        MaterialStateProperty.all<bool>(true),
-                                  ),
-                                ),
-                                menuItemStyleData: const MenuItemStyleData(
-                                  height: 40,
-                                  padding: EdgeInsets.only(left: 14, right: 14),
-                                ),
-                              ),
-                            ),
-                            // Padding(
-                            //   padding: const EdgeInsets.only(
-                            //       left: 0.0, right: 0, top: 14),
-                            //   child: MultiSelectDialogField(
-                            //     key: _propTypeKey,
-                            //     items: propType,
-                            //     title: const Text(
-                            //       "Select Property Type",
-                            //       // style: TextStyle(color: Colors.black),
-                            //     ),
-                            //     selectedColor: Colors.grey[600],
-                            //     decoration: BoxDecoration(
-                            //       color: Color.fromARGB(102, 235, 236, 236),
-                            //       borderRadius: const BorderRadius.all(
-                            //           Radius.circular(30)),
-                            //       // border: Border.all(
-                            //       //   color: Colors.black,
-                            //       //   width: 1,
-                            //       // ),
-                            //     ),
-                            //     buttonIcon: Icon(
-                            //       Icons.arrow_drop_down,
-                            //       color: Colors.grey[500],
-                            //     ),
-                            //     buttonText: Text(
-                            //       "Select Property Type",
-                            //       style: TextStyle(
-                            //         color: Colors.grey[500],
-                            //         fontSize: 14,
-                            //         fontFamily: 'Hind',
-                            //       ),
-                            //     ),
-                            //     onConfirm: (results) {
-                            //       selectedPropType.clear();
-                            //       for (var item in results) {
-                            //         selectedPropType
-                            //             .add(item! as PropTypeOptions);
-                            //       }
-                            //       print(selectedPropType);
-                            //       // print("Selected Subjects: $selectedFac");
-                            //     },
-                            //   ),
-                            // ),
-
-                            DropdownButtonHideUnderline(
-                              child: DropdownButton2<Options>(
-                                isExpanded: true,
-                                hint: Row(
-                                  children: [
-                                    // Icon(
-                                    //   Icons.list,
-                                    //   size: 16,
-                                    //   // color: Colors.yellow,
-                                    // ),
-                                    SizedBox(
-                                      width: 4,
-                                    ),
-                                    Expanded(
-                                      child: Text(
-                                        'Rooms',
-                                        style: TextStyle(
-                                          fontSize: 14,
-                                          fontFamily: 'Hind',
-                                          // fontWeight: FontWeight.bold,
-                                          color: Colors.grey[500],
-                                        ),
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                items: items
-                                    .map((Options item) =>
-                                        DropdownMenuItem<Options>(
-                                          value: item,
-                                          child: Text(
-                                            '${item.name}',
-                                            style: TextStyle(
-                                              fontSize: 14,
-                                              // color: const Color.fromARGB(255, 0, 0, 0),
-                                              color: Colors.grey[800],
-                                              // fontWeight: FontWeight.bold,
-                                              fontFamily: 'Hind',
-                                            ),
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                        ))
-                                    .toList(),
-                                value: selectedValue,
-                                onChanged: (Options? value) {
-                                  setState(() {
-                                    selectedValue = value!;
-                                    room_id = value.id;
-                                    // print(room_id);
-                                  });
-                                },
-                                buttonStyleData: ButtonStyleData(
-                                  height: 50,
-                                  width: 130,
-                                  padding: const EdgeInsets.only(
-                                      left: 14, right: 14),
-                                  decoration: BoxDecoration(
-                                    borderRadius: BorderRadius.circular(14),
-                                    // border: Border.all(
-                                    //   color: Colors.black26,
-                                    // ),
-                                    color: Color.fromARGB(102, 235, 236, 236),
-                                  ),
-                                  // elevation: 1,
-                                ),
-                                iconStyleData: IconStyleData(
-                                  icon: Icon(
-                                    Icons.arrow_forward_ios_outlined,
-                                  ),
-                                  iconSize: 14,
-                                  iconEnabledColor: Colors.grey[500],
-                                  // iconDisabledColor: Colors.grey,
-                                ),
-                                dropdownStyleData: DropdownStyleData(
-                                  maxHeight: 200,
-                                  width: 150,
-                                  decoration: BoxDecoration(
-                                    borderRadius: BorderRadius.circular(14),
-                                    color: Colors.grey[300],
-                                  ),
-                                  offset: const Offset(-20, 0),
-                                  scrollbarTheme: ScrollbarThemeData(
-                                    radius: const Radius.circular(40),
-                                    thickness:
-                                        MaterialStateProperty.all<double>(6),
-                                    thumbVisibility:
-                                        MaterialStateProperty.all<bool>(true),
-                                  ),
-                                ),
-                                menuItemStyleData: const MenuItemStyleData(
-                                  height: 40,
-                                  padding: EdgeInsets.only(left: 14, right: 14),
-                                ),
-                              ),
-                            ),
-                          ],
+                  children: [
+                    _buildCard(
+                      icon: Icons.home_work_rounded,
+                      title: 'Property Details',
+                      children: [
+                        _buildTypeSelector(),
+                        const SizedBox(height: 16),
+                        Row(children: [
+                          Expanded(child: _buildRoomsDropdown()),
+                          const SizedBox(width: 12),
+                          Expanded(
+                              child: _buildField(
+                                  'Rent / month', _priceCtrl,
+                                  Icons.currency_rupee_rounded,
+                                  keyboard: TextInputType.number,
+                                  validator: _numValidator)),
+                        ]),
+                        const SizedBox(height: 12),
+                        _buildField('Property Title', _titleCtrl,
+                            Icons.title_rounded,
+                            validator: _titleValidator),
+                        const SizedBox(height: 12),
+                        _buildField('Full Address', _addressCtrl,
+                            Icons.location_on_rounded,
+                            validator: _requiredValidator),
+                        const SizedBox(height: 12),
+                        _buildField('Area (sq ft)', _areaCtrl,
+                            Icons.square_foot_rounded,
+                            keyboard: TextInputType.number,
+                            validator: _numValidator),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    _buildCard(
+                      icon: Icons.edit_note_rounded,
+                      title: 'Description',
+                      children: [
+                        _buildField(
+                          'Tell potential renters about your property...',
+                          _aboutCtrl,
+                          Icons.short_text_rounded,
+                          maxLines: 4,
+                          validator: _requiredValidator,
                         ),
-                      ),
-                      Padding(
-                        padding:
-                            const EdgeInsets.only(left: 0.0, right: 0, top: 14),
-                        child: MultiSelectDialogField(
-                          key: _multiSelectKey,
-                          items: dropDownData,
-                          title: const Text(
-                            "Select Home Facilities",
-                            // style: TextStyle(color: Colors.black),
-                          ),
-                          selectedColor: Colors.grey[600],
-                          decoration: BoxDecoration(
-                            color: Color.fromARGB(102, 235, 236, 236),
-                            borderRadius:
-                                const BorderRadius.all(Radius.circular(30)),
-                            // border: Border.all(
-                            //   color: Colors.black,
-                            //   width: 1,
-                            // ),
-                          ),
-                          buttonIcon: Icon(
-                            Icons.arrow_drop_down,
-                            color: Colors.grey[500],
-                          ),
-                          buttonText: Text(
-                            "Select Home Facilities",
-                            style: TextStyle(
-                              color: Colors.grey[500],
-                              fontSize: 14,
-                              fontFamily: 'Hind',
-                            ),
-                          ),
-                          onConfirm: (results) {
-                            selectedFac.clear();
-                            for (var item in results) {
-                              selectedFac.add(item! as Options);
-                            }
-                            // print("Selected Subjects: $selectedFac");
-                          },
-                        ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.only(top: 15),
-                        child: CustomInputField(
-                          np: true,
-                          controller: _title,
-                          labelText: 'Property Title',
-                          validator: (String? value) {
-                            if (value == null || value.isEmpty) {
-                              return 'Please enter a title.';
-                            }
-
-                            if (value.length > 50) {
-                              return 'Title cannot be longer than 50 characters.';
-                            }
-
-                            final RegExp regex = RegExp(r'^[a-zA-Z\s]+$');
-                            if (!regex.hasMatch(value)) {
-                              return 'Title can only contain letters and spaces.';
-                            }
-
-                            return null; // No error
-                          },
-                        ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.only(top: 15),
-                        child: CustomInputField(
-                          np: true,
-                          controller: _address,
-                          labelText: 'Address',
-                          validator: (value) {
-                            if (value == null || value.isEmpty) {
-                              return 'Please enter an Address.';
-                            }
-
-                            if (value.length > 50) {
-                              return 'Address cannot be longer than 50 characters';
-                            }
-                          },
-                        ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.only(top: 15),
-                        child: CustomInputField(
-                          np: true,
-                          controller: _area,
-                          labelText: 'Area (sq ft)',
-                          validator: (value) {
-                            if (value == null || value.isEmpty) {
-                              return 'Please enter the area.'; // Customize error message for empty field (optional)
-                            }
-                            final RegExp regex = RegExp(r'^[0-9]+$');
-                            if (!regex.hasMatch(value)) {
-                              return 'Please enter a valid area (numbers only).';
-                            }
-                            return null; // No error
-                          },
-                          keyboardType: TextInputType.number,
-                        ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.only(top: 15),
-                        child: CustomInputField(
-                          np: true,
-                          controller: _about,
-                          labelText: 'About',
-                          validator: (value) {
-                            if (value == null || value.isEmpty) {
-                              return 'About cannot be empty';
-                            }
-                          },
-                        ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.only(top: 15),
-                        child: CustomInputField(
-                          np: true,
-                          controller: _price,
-                          labelText: 'Price',
-                          validator: (value) {
-                            if (value == null || value.isEmpty) {
-                              return 'Please enter the area.'; // Customize error message for empty field (optional)
-                            }
-                            final RegExp regex = RegExp(r'^[0-9]+$');
-                            if (!regex.hasMatch(value)) {
-                              return 'Please enter a valid area (numbers only).';
-                            }
-                            return null; // No error
-                          },
-                          keyboardType: TextInputType.number,
-                        ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.only(top: 15),
-                        child: LocationContainer(
-                          address: location,
-                          updateLocation: _updateLocation,
-                        ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.only(top: 20.0, bottom: 28),
-                        child: GestureDetector(
-                          onTap: () {
-                            // Call your function here
-                            addImages();
-                          },
-                          child: selectedImages.isEmpty
-                              ? DottedBorder(
-                                  color: Colors.black,
-                                  strokeWidth: 1,
-                                  child: Container(
-                                    width: 400,
-                                    height: 100,
-                                    child: Row(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
-                                      children: [
-                                        Icon(Icons.upload),
-                                        SizedBox(width: 20),
-                                        Text("Upload Photo")
-                                      ],
-                                    ),
-                                  ),
-                                )
-                              : Wrap(
-                                  children: selectedImages
-                                      .map((image) => buildImage(image))
-                                      .toList(),
-                                ),
-                        ),
-                      ),
-                      Row(
-                        // mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        mainAxisAlignment: MainAxisAlignment.start,
-                        children: [
-                          Checkbox(
-                              value: isChecked,
-                              activeColor: Colors.grey[600],
-                              onChanged: (newBool) {
-                                print(newBool);
-                                setState(() {
-                                  isChecked = newBool;
-                                });
-                              }),
-                          Text("I agree to the terms and conditions ")
-                        ],
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.only(top: 0),
-                        child: loading
-                            ? Center(
-                                child: Padding(
-                                  padding: const EdgeInsets.only(bottom: 12.0),
-                                  child: CircularProgressIndicator(
-                                    valueColor: AlwaysStoppedAnimation<Color>(
-                                        Color(0xFF008F17)),
-                                  ),
-                                ),
-                              )
-                            : ElevatedButton(
-                                onPressed: () {
-                                  // save_prop();
-
-                                  if (_formKey.currentState!.validate()) {
-                                    if (!isChecked!) {
-                                      // Show Snackbar
-                                      ScaffoldMessenger.of(context)
-                                          .showSnackBar(
-                                        SnackBar(
-                                          content: Text(
-                                              'Please agree to the Terms & Conditions'),
-                                          duration: Duration(
-                                              seconds:
-                                                  3), // Duration for which the Snackbar is visible
-                                        ),
-                                      );
-                                      return; // Exit the function if not checked
-                                    }
-
-                                    if (selectedImages.isEmpty) {
-                                      ScaffoldMessenger.of(context)
-                                          .showSnackBar(
-                                        SnackBar(
-                                          content: Text(
-                                              'Please select image to upload.'),
-                                          duration: Duration(
-                                              seconds:
-                                                  3), // Duration for which the Snackbar is visible
-                                        ),
-                                      );
-                                      return;
-                                    }
-                                    if (property_type_id == null) {
-                                      ScaffoldMessenger.of(context)
-                                          .showSnackBar(
-                                        SnackBar(
-                                          content: Text(
-                                              'Please select a property type.'),
-                                          duration: Duration(
-                                              seconds:
-                                                  3), // Duration for which the Snackbar is visible
-                                        ),
-                                      );
-                                      return;
-                                    }
-
-                                    if (locationFlag == false) {
-                                      ScaffoldMessenger.of(context)
-                                          .showSnackBar(
-                                        SnackBar(
-                                          content:
-                                              Text('Please enter location'),
-                                          duration: Duration(
-                                              seconds:
-                                                  1), // Duration for which the Snackbar is visible
-                                        ),
-                                      );
-                                      return;
-                                    }
-
-                                    setState(() {
-                                      loading = true;
-                                      save();
-                                    });
-                                    // save();
-                                  }
-                                },
-                                style: ButtonStyle(
-                                  backgroundColor:
-                                      MaterialStateProperty.all<Color>(
-                                          Color(0xFF008F17)),
-                                  minimumSize: MaterialStateProperty.all<Size>(
-                                      const Size(double.infinity, 40)),
-                                  shape: MaterialStateProperty.all<
-                                      RoundedRectangleBorder>(
-                                    RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(8.0),
-                                    ),
-                                  ),
-                                ),
-                                child: const Text(
-                                  'SUBMIT',
-                                  style: TextStyle(
-                                    fontSize: 18,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                              ),
-                      ),
-                    ]),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    _buildCard(
+                      icon: Icons.star_rounded,
+                      title: 'Amenities',
+                      children: [_buildFacilityChips()],
+                    ),
+                    const SizedBox(height: 12),
+                    _buildCard(
+                      icon: Icons.photo_library_rounded,
+                      title: 'Property Photos',
+                      children: [_buildPhotoArea()],
+                    ),
+                    const SizedBox(height: 20),
+                    _buildTermsAndSubmit(),
+                  ],
+                ),
               ),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSliverHeader() {
+    return SliverAppBar(
+      expandedHeight: 150,
+      pinned: true,
+      backgroundColor: const Color(0xFF3D22B8),
+      leading: GestureDetector(
+        onTap: () => Navigator.pop(context),
+        child: Container(
+          margin: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.18),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: const Icon(Icons.arrow_back_rounded,
+              color: Colors.white, size: 20),
+        ),
+      ),
+      actions: [
+        Container(
+          margin: const EdgeInsets.fromLTRB(0, 8, 12, 8),
+          padding:
+              const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.18),
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: const Text('Save Draft',
+              style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600)),
+        ),
+      ],
+      flexibleSpace: FlexibleSpaceBar(
+        background: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              colors: [Color(0xFF1E0B6E), Color(0xFF3D22B8), Color(0xFF6246EA)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.end,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'List Your Property',
+                style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 26,
+                    fontWeight: FontWeight.w800,
+                    fontFamily: 'Hind'),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Reach thousands of verified renters in Guwahati',
+                style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.75),
+                    fontSize: 13),
+              ),
+            ],
           ),
         ),
       ),
     );
   }
 
-  Widget buildImage(XFile image) {
-    final imageFile = File(image.path);
-    // print(imageFile.path);
+  Widget _buildCard(
+      {required IconData icon,
+      required String title,
+      required List<Widget> children}) {
     return Container(
-      width: 50, // Adjust width and height as needed
-      height: 50, // Adjust width and height as needed
-      margin: EdgeInsets.all(5), // Add spacing between images (optional)
-      child: Image(
-        image: FileImage(imageFile),
-        fit: BoxFit.cover,
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.06),
+            blurRadius: 12,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFF6246EA).withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(icon, color: const Color(0xFF6246EA), size: 18),
+            ),
+            const SizedBox(width: 10),
+            Text(title,
+                style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF1A1A2E),
+                    fontFamily: 'Hind')),
+          ]),
+          Divider(color: Colors.grey.withValues(alpha: 0.12), height: 24),
+          ...children,
+        ],
       ),
     );
+  }
+
+  Widget _buildTypeSelector() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('Property Type',
+            style: TextStyle(
+                fontSize: 12,
+                color: Color(0xFF8E8E93),
+                fontWeight: FontWeight.w500)),
+        const SizedBox(height: 10),
+        Row(
+          children: List.generate(_propertyTypes.length, (i) {
+            final type = _propertyTypes[i];
+            final label = (type['label'] as String).replaceAll('\n', ' ');
+            final selected = _selectedType == label;
+            return Expanded(
+              child: GestureDetector(
+                onTap: () => setState(() => _selectedType = label),
+                child: Container(
+                  margin: EdgeInsets.only(
+                      right: i < _propertyTypes.length - 1 ? 8 : 0),
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  decoration: BoxDecoration(
+                    color: selected
+                        ? const Color(0xFF6246EA)
+                        : const Color(0xFFF4F5F8),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: selected
+                          ? const Color(0xFF6246EA)
+                          : Colors.transparent,
+                    ),
+                    boxShadow: selected
+                        ? [
+                            BoxShadow(
+                              color: const Color(0xFF6246EA)
+                                  .withValues(alpha: 0.3),
+                              blurRadius: 8,
+                              offset: const Offset(0, 3),
+                            )
+                          ]
+                        : [],
+                  ),
+                  child: Column(
+                    children: [
+                      Icon(type['icon'] as IconData,
+                          size: 20,
+                          color: selected
+                              ? Colors.white
+                              : const Color(0xFF8E8E93)),
+                      const SizedBox(height: 5),
+                      Text(
+                        type['label'] as String,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: selected
+                              ? Colors.white
+                              : const Color(0xFF555555),
+                          fontWeight: selected
+                              ? FontWeight.w700
+                              : FontWeight.normal,
+                          height: 1.2,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          }),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildRoomsDropdown() {
+    return DropdownButtonFormField<String>(
+      initialValue: _selectedRooms,
+      decoration: _inputDecoration('Bedrooms', Icons.bed_rounded),
+      hint: const Text('Rooms',
+          style: TextStyle(color: Color(0xFFAAAAAA), fontSize: 13)),
+      items: _roomOptions
+          .map((r) => DropdownMenuItem(
+              value: r,
+              child: Text(r,
+                  style: const TextStyle(
+                      fontSize: 14, color: Color(0xFF1A1A2E)))))
+          .toList(),
+      onChanged: (v) => setState(() => _selectedRooms = v),
+    );
+  }
+
+  Widget _buildField(
+    String hint,
+    TextEditingController ctrl,
+    IconData icon, {
+    TextInputType keyboard = TextInputType.text,
+    int maxLines = 1,
+    String? Function(String?)? validator,
+  }) {
+    return TextFormField(
+      controller: ctrl,
+      keyboardType: keyboard,
+      maxLines: maxLines,
+      validator: validator,
+      style: const TextStyle(fontSize: 14, color: Color(0xFF1A1A2E)),
+      decoration: _inputDecoration(hint, icon),
+    );
+  }
+
+  InputDecoration _inputDecoration(String hint, IconData icon) {
+    return InputDecoration(
+      hintText: hint,
+      hintStyle: const TextStyle(color: Color(0xFFAAAAAA), fontSize: 13),
+      prefixIcon: Icon(icon, color: const Color(0xFF6246EA), size: 20),
+      contentPadding:
+          const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+      border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide:
+              BorderSide(color: Colors.grey.withValues(alpha: 0.2))),
+      enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide:
+              BorderSide(color: Colors.grey.withValues(alpha: 0.2))),
+      focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide:
+              const BorderSide(color: Color(0xFF6246EA), width: 1.5)),
+      errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: Colors.red)),
+      focusedErrorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: Colors.red, width: 1.5)),
+      filled: true,
+      fillColor: const Color(0xFFF8F8FA),
+    );
+  }
+
+  Widget _buildFacilityChips() {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: _facilities.map((fac) {
+        final label = fac['label'] as String;
+        final selected = _selectedFacilities.contains(label);
+        return GestureDetector(
+          onTap: () => setState(() {
+            if (selected) {
+              _selectedFacilities.remove(label);
+            } else {
+              _selectedFacilities.add(label);
+            }
+          }),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            padding:
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: selected
+                  ? const Color(0xFF6246EA)
+                  : const Color(0xFFF4F5F8),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: selected
+                    ? const Color(0xFF6246EA)
+                    : const Color(0xFFE0E0E0),
+              ),
+              boxShadow: selected
+                  ? [
+                      BoxShadow(
+                          color:
+                              const Color(0xFF6246EA).withValues(alpha: 0.25),
+                          blurRadius: 6,
+                          offset: const Offset(0, 2))
+                    ]
+                  : [],
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(fac['icon'] as IconData,
+                    size: 14,
+                    color: selected
+                        ? Colors.white
+                        : const Color(0xFF8E8E93)),
+                const SizedBox(width: 5),
+                Text(label,
+                    style: TextStyle(
+                        fontSize: 12,
+                        color: selected
+                            ? Colors.white
+                            : const Color(0xFF555555),
+                        fontWeight: selected
+                            ? FontWeight.w600
+                            : FontWeight.normal)),
+              ],
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  Widget _buildPhotoArea() {
+    if (_selectedImages.isEmpty) {
+      return GestureDetector(
+        onTap: _pickImages,
+        child: Container(
+          width: double.infinity,
+          height: 130,
+          decoration: BoxDecoration(
+            color: const Color(0xFF6246EA).withValues(alpha: 0.04),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: const Color(0xFF6246EA).withValues(alpha: 0.3),
+              width: 1.5,
+            ),
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF6246EA).withValues(alpha: 0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.add_photo_alternate_rounded,
+                    color: Color(0xFF6246EA), size: 28),
+              ),
+              const SizedBox(height: 10),
+              const Text('Tap to upload photos',
+                  style: TextStyle(
+                      color: Color(0xFF6246EA),
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14)),
+              const SizedBox(height: 2),
+              const Text('Add exterior, interior & room photos',
+                  style:
+                      TextStyle(color: Color(0xFF8E8E93), fontSize: 11)),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        GridView.count(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          crossAxisCount: 3,
+          crossAxisSpacing: 8,
+          mainAxisSpacing: 8,
+          children: [
+            ..._selectedImages.take(5).map(_buildImageTile),
+            GestureDetector(
+              onTap: _pickImages,
+              child: Container(
+                decoration: BoxDecoration(
+                  color: const Color(0xFF6246EA).withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                      color: const Color(0xFF6246EA).withValues(alpha: 0.3)),
+                ),
+                child: const Icon(Icons.add_rounded,
+                    color: Color(0xFF6246EA), size: 28),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Text(
+          '${_selectedImages.length} photo${_selectedImages.length == 1 ? '' : 's'} selected',
+          style:
+              const TextStyle(color: Color(0xFF8E8E93), fontSize: 12),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildImageTile(XFile img) {
+    return Stack(
+      children: [
+        Container(
+          decoration: BoxDecoration(
+            color: const Color(0xFF6246EA).withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.image_rounded,
+                    color: Color(0xFF6246EA), size: 24),
+                const SizedBox(height: 4),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: Text(img.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                          fontSize: 8, color: Color(0xFF6246EA))),
+                ),
+              ],
+            ),
+          ),
+        ),
+        Positioned(
+          top: 4,
+          right: 4,
+          child: GestureDetector(
+            onTap: () => setState(() => _selectedImages.remove(img)),
+            child: Container(
+              padding: const EdgeInsets.all(3),
+              decoration: const BoxDecoration(
+                  color: Colors.red, shape: BoxShape.circle),
+              child:
+                  const Icon(Icons.close, color: Colors.white, size: 10),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTermsAndSubmit() {
+    return Column(
+      children: [
+        GestureDetector(
+          onTap: () => setState(() => _agreed = !_agreed),
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: _agreed
+                    ? const Color(0xFF6246EA).withValues(alpha: 0.4)
+                    : Colors.transparent,
+              ),
+              boxShadow: [
+                BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.05),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2))
+              ],
+            ),
+            child: Row(
+              children: [
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  width: 22,
+                  height: 22,
+                  decoration: BoxDecoration(
+                    color: _agreed
+                        ? const Color(0xFF6246EA)
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(
+                        color: _agreed
+                            ? const Color(0xFF6246EA)
+                            : const Color(0xFFCCCCCC),
+                        width: 1.5),
+                  ),
+                  child: _agreed
+                      ? const Icon(Icons.check_rounded,
+                          color: Colors.white, size: 14)
+                      : null,
+                ),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('I agree to the Terms & Conditions',
+                          style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF1A1A2E))),
+                      SizedBox(height: 2),
+                      Text(
+                          'Your listing will be reviewed within 24 hours',
+                          style: TextStyle(
+                              fontSize: 11, color: Color(0xFF8E8E93))),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+        GestureDetector(
+          onTap: _submitting ? null : _submit,
+          child: Container(
+            height: 56,
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFF3D22B8), Color(0xFF6246EA)],
+                begin: Alignment.centerLeft,
+                end: Alignment.centerRight,
+              ),
+              borderRadius: BorderRadius.circular(14),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFF6246EA).withValues(alpha: 0.4),
+                  blurRadius: 16,
+                  offset: const Offset(0, 6),
+                ),
+              ],
+            ),
+            child: Center(
+              child: _submitting
+                  ? const SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CircularProgressIndicator(
+                          color: Colors.white, strokeWidth: 2.5))
+                  : const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.rocket_launch_rounded,
+                            color: Colors.white, size: 20),
+                        SizedBox(width: 10),
+                        Text('Publish Listing',
+                            style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 0.3)),
+                      ],
+                    ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  String? _requiredValidator(String? v) =>
+      (v == null || v.trim().isEmpty) ? 'This field is required' : null;
+
+  String? _titleValidator(String? v) {
+    if (v == null || v.trim().isEmpty) return 'Please enter a title';
+    if (v.length > 50) return 'Title must be under 50 characters';
+    return null;
+  }
+
+  String? _numValidator(String? v) {
+    if (v == null || v.trim().isEmpty) return 'This field is required';
+    if (int.tryParse(v.trim()) == null) return 'Enter a valid number';
+    return null;
   }
 }

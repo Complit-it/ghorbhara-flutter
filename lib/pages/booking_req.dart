@@ -1,14 +1,9 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:hello_world/data/dummy_data.dart';
+import 'package:hello_world/models/booking.dart';
 import 'package:hello_world/models/property.dart';
 import 'package:hello_world/pages/chat_screen.dart';
-import 'package:hello_world/services/property_functions.dart';
-// import 'package:http/http.dart';
-
-import '../constant.dart';
-import '../models/booking.dart';
-import '../models/chat_user.dart';
-import '../services/user_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class BookingRequests extends StatefulWidget {
   const BookingRequests({super.key});
@@ -18,333 +13,203 @@ class BookingRequests extends StatefulWidget {
 }
 
 class _BookingRequestsState extends State<BookingRequests> {
-  int? userId;
-  List<Property> properties = [];
-  Property? props;
   bool isLoading = true;
+  // Map of property → its bookings (for owners viewing requests on their props)
+  List<MapEntry<Property, List<Booking>>> _propBookings = [];
+
   @override
   void initState() {
     super.initState();
-    // loadUserId();
-    fetchData();
+    _loadRequests();
   }
 
-  void fetchData() async {
-    userId = await getUserId();
-    // print(userId);
-    String url = getBookPropUrl;
-    String data = 'userId=$userId';
-    final apiResponse = await getReq(url, data);
-    if (apiResponse.error == null) {
-      if (mounted) {
-        // setState(() {});
-        setState(() {
-          properties = apiResponse.data as List<Property>;
-          isLoading = false;
-        });
-      }
-
-      // print('properties : $properties');
-    } else {}
+  Future<void> _loadRequests() async {
+    final prefs = await SharedPreferences.getInstance();
+    final userId = prefs.getInt('userId') ?? 0;
+    final myProps = DummyData.dummyProperties
+        .where((p) => p.userId == userId.toString())
+        .toList();
+    final result = myProps
+        .map((p) => MapEntry(p, DummyData.getPropertyBookings(p.id)))
+        .where((e) => e.value.isNotEmpty)
+        .toList();
+    if (mounted) {
+      setState(() {
+        _propBookings = result;
+        isLoading = false;
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-        body: isLoading
-            ? const Center(
-                child: CircularProgressIndicator(),
-              )
-            : SafeArea(
-                child: SingleChildScrollView(
-                child: Padding(
-                  padding: const EdgeInsets.only(left: 21, right: 21),
-                  child: Column(children: [
-                    Container(
-                      child: properties.isEmpty
-                          ? const Center(
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(
-                                    Icons.info_outline,
-                                    color: Color(0xFF6246EA),
-                                    size: 50,
-                                  ),
-                                  SizedBox(height: 16),
-                                  Text(
-                                    'No properties booked',
-                                    style: TextStyle(
-                                      color: Colors.black,
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                  SizedBox(height: 8),
-                                  Text(
-                                    'Please check back later.',
-                                    style: TextStyle(
-                                      color: Colors.grey,
-                                      fontSize: 16,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            )
-                          : ListView.builder(
-                              shrinkWrap: true,
-                              physics: const NeverScrollableScrollPhysics(),
-                              itemCount: properties.length,
-                              itemBuilder: (context, index) {
-                                Property property = properties[index];
-                                final imageUrl =
-                                    baseUrl + property.image!.imagePath!;
-                                return Padding(
-                                  padding: const EdgeInsets.only(
-                                      top: 14.0, bottom: 0),
-                                  child: Container(
-                                    decoration: BoxDecoration(
-                                      borderRadius: BorderRadius.circular(7),
-                                      color: Colors.white,
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: Colors.grey.withOpacity(0.3),
-                                          spreadRadius: 0.3,
-                                          blurRadius: 1,
-                                        ),
-                                      ],
-                                    ),
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Padding(
-                                          padding: const EdgeInsets.all(0),
-                                          child: Container(
-                                            height: 200,
-                                            width: MediaQuery.of(context)
-                                                .size
-                                                .width,
-                                            child: ClipRRect(
-                                              borderRadius:
-                                                  const BorderRadius.only(
-                                                topLeft: Radius.circular(7),
-                                                topRight: Radius.circular(7),
-                                              ),
-                                              child: CachedNetworkImage(
-                                                imageUrl: imageUrl,
-                                                placeholder: (context, url) =>
-                                                    const Center(
-                                                        child:
-                                                            CircularProgressIndicator()),
-                                                errorWidget:
-                                                    (context, url, error) =>
-                                                        const Icon(Icons.error),
-                                                fit: BoxFit.fill,
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                        Padding(
-                                          padding: const EdgeInsets.symmetric(
-                                              vertical: 12, horizontal: 14),
-                                          child: Row(
-                                            mainAxisAlignment:
-                                                MainAxisAlignment.spaceBetween,
-                                            children: [
-                                              Flexible(
-                                                child: Text(
-                                                  property.title.toUpperCase(),
-                                                  maxLines: 1,
-                                                  overflow:
-                                                      TextOverflow.ellipsis,
-                                                  style: TextStyle(
-                                                      fontWeight:
-                                                          FontWeight.w600,
-                                                      fontSize: 16,
-                                                      fontFamily: 'Hind',
-                                                      color: Colors.grey[700]),
-                                                ),
-                                              ),
-                                              const SizedBox(
-                                                width: 28,
-                                              ),
-                                              RichText(
-                                                text: TextSpan(
-                                                  style: DefaultTextStyle.of(
-                                                          context)
-                                                      .style,
-                                                  children: <TextSpan>[
-                                                    TextSpan(
-                                                      text:
-                                                          'Rs ${property.price}',
-                                                      style: const TextStyle(
-                                                        fontSize: 14,
-                                                        fontWeight:
-                                                            FontWeight.w500,
-                                                        color: Colors.black,
-                                                      ),
-                                                    ),
-                                                    TextSpan(
-                                                      text: ' /month',
-                                                      style: TextStyle(
-                                                        color: Colors.grey[400],
-                                                        fontSize: 12,
-                                                        fontWeight:
-                                                            FontWeight.normal,
-                                                      ),
-                                                    ),
-                                                  ],
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                        const Padding(
-                                          padding: EdgeInsets.symmetric(
-                                              vertical: 0, horizontal: 14),
-                                          child: Divider(),
-                                        ),
-                                        Padding(
-                                          padding: const EdgeInsets.symmetric(
-                                              vertical: 12, horizontal: 14),
-                                          child: Text(
-                                            'Booking Requests',
-                                            style: TextStyle(
-                                                fontWeight: FontWeight.w600,
-                                                fontSize: 16,
-                                                fontFamily: 'Hind',
-                                                color: Colors.grey[700]),
-                                          ),
-                                        ),
-                                        ListView.builder(
-                                          shrinkWrap: true,
-                                          physics:
-                                              const NeverScrollableScrollPhysics(),
-                                          itemCount: property.bookings?.length,
-                                          itemBuilder: (context, bookingIndex) {
-                                            Booking booking = property
-                                                .bookings![bookingIndex];
-                                            User? user = booking.user;
+    if (isLoading) {
+      return const Center(
+          child: CircularProgressIndicator(color: Color(0xFF6246EA)));
+    }
+    if (_propBookings.isEmpty) {
+      return const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.inbox_rounded, size: 64, color: Color(0xFFDDDDDD)),
+            SizedBox(height: 16),
+            Text('No booking requests',
+                style:
+                    TextStyle(color: Color(0xFF8E8E93), fontSize: 16)),
+            SizedBox(height: 8),
+            Text('Requests on your properties appear here.',
+                style:
+                    TextStyle(color: Color(0xFFAAAAAA), fontSize: 13)),
+          ],
+        ),
+      );
+    }
 
-                                            return Padding(
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                      horizontal: 14.0,
-                                                      vertical: 8.0),
-                                              child: Container(
-                                                decoration: BoxDecoration(
-                                                  borderRadius:
-                                                      BorderRadius.circular(7),
-                                                  color: const Color.fromARGB(
-                                                      255, 104, 121, 220),
-                                                  // boxShadow: [
-                                                  //   BoxShadow(
-                                                  //     color: Colors.grey
-                                                  //         .withOpacity(0.3),
-                                                  //     spreadRadius: 0.3,
-                                                  //     blurRadius: 1,
-                                                  //   ),
-                                                  // ],
-                                                ),
-                                                child: Padding(
-                                                  padding: const EdgeInsets
-                                                      .symmetric(
-                                                      horizontal: 12),
-                                                  child: Row(
-                                                    mainAxisAlignment:
-                                                        MainAxisAlignment
-                                                            .spaceBetween,
-                                                    children: [
-                                                      Row(
-                                                        children: [
-                                                          Text(
-                                                            user != null
-                                                                ? user.name!
-                                                                : 'Unknown User',
-                                                            style: const TextStyle(
-                                                                fontSize: 14,
-                                                                fontWeight:
-                                                                    FontWeight
-                                                                        .w500,
-                                                                color: Colors
-                                                                    .white),
-                                                          ),
-                                                          IconButton(
-                                                            onPressed:
-                                                                () async {
-                                                              try {
-                                                                // Fetch user details
-                                                                var userDoc = await API
-                                                                    .getUserById(
-                                                                        user!
-                                                                            .google_id!);
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: _propBookings.length,
+      itemBuilder: (context, index) {
+        final entry = _propBookings[index];
+        final property = entry.key;
+        final bookings = entry.value;
+        return _PropertyRequestCard(
+            property: property, bookings: bookings);
+      },
+    );
+  }
+}
 
-                                                                // Convert to ChatUser
-                                                                var chatUser =
-                                                                    ChatUser.fromJson(
-                                                                        userDoc
-                                                                            .data()!);
+class _PropertyRequestCard extends StatelessWidget {
+  final Property property;
+  final List<Booking> bookings;
+  const _PropertyRequestCard(
+      {required this.property, required this.bookings});
 
-                                                                // Navigate to ChatScreen
-                                                                if (mounted) {
-                                                                  Navigator
-                                                                      .push(
-                                                                    context,
-                                                                    MaterialPageRoute(
-                                                                      builder: (_) =>
-                                                                          ChatScreen(
-                                                                              user: chatUser),
-                                                                    ),
-                                                                  );
-                                                                }
-                                                              } catch (e) {
-                                                                // print('Error: $e');
-                                                                // Handle error (e.g., show a snackbar or dialog)
-                                                              }
-                                                            },
-                                                            icon: const Icon(
-                                                              Icons.message,
-                                                              size: 18,
-                                                              color: Color
-                                                                  .fromARGB(
-                                                                      255,
-                                                                      255,
-                                                                      255,
-                                                                      255),
-                                                            ),
-                                                          )
-                                                        ],
-                                                      ),
-                                                      Text(
-                                                        booking.bookingDate!,
-                                                        style: const TextStyle(
-                                                          fontSize: 14,
-                                                          fontWeight:
-                                                              FontWeight.w400,
-                                                          color: Color.fromARGB(
-                                                              255,
-                                                              255,
-                                                              255,
-                                                              255),
-                                                        ),
-                                                      ),
-                                                    ],
-                                                  ),
-                                                ),
-                                              ),
-                                            );
-                                          },
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                );
-                              },
-                            ),
-                    )
-                  ]),
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.06),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: const BoxDecoration(
+              color: Color(0xFF6246EA),
+              borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.home_rounded, color: Colors.white, size: 18),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    property.title,
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                        fontFamily: 'Hind'),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
-              )));
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    '${bookings.length} request${bookings.length != 1 ? 's' : ''}',
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          ...bookings.map((booking) {
+            final tenant =
+                DummyData.getUserById(int.tryParse(booking.userId ?? '0') ?? 0);
+            final tenantName = tenant?.name ?? 'Unknown Tenant';
+            final tenantId = tenant?.id ?? 0;
+            return Padding(
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 16, vertical: 10),
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    radius: 20,
+                    backgroundColor:
+                        const Color(0xFF6246EA).withValues(alpha: 0.12),
+                    child: Text(
+                      tenantName[0].toUpperCase(),
+                      style: const TextStyle(
+                          color: Color(0xFF6246EA),
+                          fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(tenantName,
+                            style: const TextStyle(
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFF1A1A2E))),
+                        Text(
+                          'Booked: ${booking.bookingDate ?? 'N/A'}',
+                          style: const TextStyle(
+                              color: Color(0xFF8E8E93), fontSize: 12),
+                        ),
+                      ],
+                    ),
+                  ),
+                  GestureDetector(
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => LocalChatScreen(
+                            otherUserId: tenantId,
+                            otherUserName: tenantName,
+                          ),
+                        ),
+                      );
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF6246EA).withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Icon(Icons.chat_bubble_outline_rounded,
+                          color: Color(0xFF6246EA), size: 18),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }),
+        ],
+      ),
+    );
   }
 }

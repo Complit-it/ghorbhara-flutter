@@ -1,18 +1,11 @@
 import 'package:flutter/material.dart';
-// import 'package:hello_world/constant.dart';
-// import 'package:hello_world/models/api_response.dart';
+import 'package:hello_world/data/dummy_data.dart';
 import 'package:hello_world/models/facility.dart';
+import 'package:hello_world/models/property.dart';
 import 'package:hello_world/pages/components/reusables/property_card.dart';
 import 'package:hello_world/pages/filter_screen.dart';
-import 'package:hello_world/services/property_functions.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-
-import '../models/options.dart';
-import '../models/property.dart';
 
 class ExplorePage extends StatefulWidget {
-  // String searchText;
-
   const ExplorePage({super.key});
 
   @override
@@ -20,203 +13,130 @@ class ExplorePage extends StatefulWidget {
 }
 
 class _ExplorePageState extends State<ExplorePage> {
-  List<String> locations = [];
-  // final List<String> _searchList = [];
-  bool isLoading = true;
-  List<Property>? props;
-  List<Property> filteredProps = [];
-  TextEditingController _searchController = TextEditingController();
-  String searchText = "";
+  late List<Property> _allProps;
+  late List<Property> _filteredProps;
+  final TextEditingController _searchController = TextEditingController();
+
   @override
   void initState() {
     super.initState();
-    _initializeData();
-    _searchController.addListener(_filterProperties);
+    _allProps = DummyData.dummyProperties;
+    _filteredProps = _allProps;
+    _searchController.addListener(_filterBySearch);
   }
 
-  void _filterProperties() {
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  void _filterBySearch() {
     final query = _searchController.text.toLowerCase();
-
     setState(() {
-      filteredProps = props?.where((property) {
-            final titleMatch = property.title.toLowerCase().contains(query);
-            final addressMatch =
-                property.location!.location!.toLowerCase().contains(query);
-            return titleMatch || addressMatch;
-          }).toList() ??
-          [];
+      _filteredProps = _allProps.where((p) {
+        final titleMatch = p.title.toLowerCase().contains(query);
+        final locationMatch =
+            (p.location?.location ?? '').toLowerCase().contains(query);
+        return titleMatch || locationMatch;
+      }).toList();
     });
-  }
-
-  Future<void> _initializeData() async {
-    SharedPreferences pref = await SharedPreferences.getInstance();
-    int? id = pref.getInt('userId');
-
-    if (id != null) {
-      final apiResponse = await get_all_property(id);
-      if (apiResponse.error == null) {
-        if (mounted) {
-          setState(() {
-            props = apiResponse.data as List<Property>;
-            isLoading = false;
-            if (props != null) {
-              filteredProps = props!;
-            }
-          });
-        }
-      } else {
-        // Handle API error (optional)
-        // print('Error fetching properties');
-        if (mounted) {
-          setState(() {
-            props = [];
-            isLoading = false;
-          });
-        }
-      }
-    } else {
-      // print('User ID is null');
-      setState(() {
-        props = [];
-        isLoading = false;
-      });
-    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: const Color(0xFFF8F8FF),
       appBar: AppBar(
         backgroundColor: Colors.white,
-        toolbarHeight: 80.0,
         surfaceTintColor: Colors.transparent,
-        title: Padding(
-          padding: const EdgeInsets.only(top: 16.0),
-          child: Row(
-            children: [
-              Expanded(
+        toolbarHeight: 72,
+        elevation: 0,
+        title: Row(
+          children: [
+            Expanded(
+              child: Container(
+                height: 44,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF2F2F7),
+                  borderRadius: BorderRadius.circular(12),
+                ),
                 child: TextField(
                   controller: _searchController,
-                  style: const TextStyle(
-                      fontSize: 14.0, color: Color.fromARGB(255, 0, 0, 0)),
-                  cursorColor: Colors.white,
-                  decoration: InputDecoration(
-                    prefixIcon: Padding(
-                      padding: const EdgeInsets.all(8.0),
-                      child: Icon(
-                        Icons.search,
-                        color: Colors.grey[700],
-                      ),
-                    ),
-                    contentPadding:
-                        const EdgeInsets.symmetric(vertical: 0, horizontal: 16),
-                    hintText: 'Search address, city, location',
-                    hintStyle:
-                        const TextStyle(color: Color.fromARGB(179, 0, 0, 0)),
-                    filled: true,
-                    fillColor: const Color.fromARGB(255, 231, 225, 225),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(33.0),
-                      borderSide: BorderSide.none,
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(33.0),
-                      borderSide: const BorderSide(
-                        color: Colors.blue,
-                        width: 0,
-                      ),
-                    ),
+                  style: const TextStyle(fontSize: 14, color: Color(0xFF1A1A2E)),
+                  decoration: const InputDecoration(
+                    prefixIcon: Icon(Icons.search, color: Color(0xFF6246EA), size: 20),
+                    hintText: 'Search city, area, property...',
+                    hintStyle: TextStyle(color: Color(0xFFAAAAAA), fontSize: 13),
+                    border: InputBorder.none,
+                    contentPadding: EdgeInsets.symmetric(vertical: 12),
                   ),
-                  onSubmitted: (String value) {
-                    setState(() {
-                      isLoading = true;
-                      searchText = value;
-                    });
-                  },
                 ),
               ),
-              const SizedBox(
-                width: 24,
-              ),
-              GestureDetector(
-                  onTap: () async {
-                    final result = await Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const FilterScreen(),
-                      ),
-                    );
-                    // print(props);
-                    if (result != null) {
-                      setState(() {
-                        filteredProps = props!.where((property) {
-                          final price = double.tryParse(property.price ?? '0');
-
-                          final isPriceInRange = price != null &&
-                              price >= result.values.start &&
-                              price <= result.values.end;
-
-                          final hasSelectedFacilities =
-                              result.selectedFacilities.every(
-                            (Facility facility) {
-                              final List<HomeFacility>? homeFacilities =
-                                  property.homeFacilities;
-                              return homeFacilities != null &&
-                                  homeFacilities.any(
-                                    (HomeFacility homeFacility) =>
-                                        homeFacility.facility.id == facility.id,
-                                  );
-                            },
-                          );
-
-                          final hasSelectedPropertyType =
-                              result.selectedPropType.isEmpty ||
-                                  result.selectedPropType.any(
-                                    (Options selectedType) =>
-                                        property.propertyType?.id ==
-                                        selectedType.id,
-                                  );
-
-                          return isPriceInRange &&
-                              hasSelectedFacilities &&
-                              hasSelectedPropertyType;
-                        }).toList();
+            ),
+            const SizedBox(width: 12),
+            GestureDetector(
+              onTap: () async {
+                final result = await Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const FilterScreen()),
+                );
+                if (result != null) {
+                  setState(() {
+                    _filteredProps = _allProps.where((property) {
+                      final price = double.tryParse(property.price ?? '0') ?? 0;
+                      final isPriceInRange = price >= result.values.start &&
+                          price <= result.values.end;
+                      final hasSelectedFacilities =
+                          result.selectedFacilities.every((Facility facility) {
+                        final facilities = property.homeFacilities;
+                        return facilities != null &&
+                            facilities.any((hf) => hf.facility.id == facility.id);
                       });
-                    }
-                  },
-                  child: Icon(
-                    Icons.filter_alt,
-                    size: 32,
-                    color: Theme.of(context).primaryColor,
-                  )),
-            ],
-          ),
+                      final hasSelectedType = result.selectedPropType.isEmpty ||
+                          result.selectedPropType.any((opt) =>
+                              int.tryParse(property.propertyTypeId) == opt.id);
+                      return isPriceInRange &&
+                          hasSelectedFacilities &&
+                          hasSelectedType;
+                    }).toList();
+                  });
+                }
+              },
+              child: Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF6246EA).withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(Icons.tune_rounded,
+                    color: Color(0xFF6246EA), size: 22),
+              ),
+            ),
+          ],
         ),
       ),
-      body: isLoading
-          ? const Center(
-              child: CircularProgressIndicator(),
+      body: _filteredProps.isEmpty
+          ? Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.search_off_rounded,
+                      size: 64, color: Colors.grey[300]),
+                  const SizedBox(height: 16),
+                  const Text('No properties found',
+                      style:
+                          TextStyle(color: Color(0xFF8E8E93), fontSize: 16)),
+                ],
+              ),
             )
-          : Padding(
+          : ListView.builder(
               padding:
-                  const EdgeInsets.symmetric(vertical: 16.0, horizontal: 12),
-              child: (filteredProps == null || filteredProps.isEmpty)
-                  ? const Center(
-                      child: Text(
-                        'No data available',
-                        style: TextStyle(color: Colors.black),
-                      ),
-                    )
-                  : ListView.builder(
-                      scrollDirection: Axis.vertical,
-                      itemCount: filteredProps.length,
-                      itemBuilder: (context, index) {
-                        Property property = filteredProps[index];
-                        // final imageUrl = baseUrl + property.image!.imagePath;
-                        return PropertyCard(
-                          property: property,
-                        );
-                      })),
+                  const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
+              itemCount: _filteredProps.length,
+              itemBuilder: (context, index) =>
+                  PropertyCard(property: _filteredProps[index]),
+            ),
     );
   }
 }

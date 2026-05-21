@@ -4,10 +4,13 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:get/get.dart';
+import 'package:hello_world/config/app_config.dart';
 import 'package:hello_world/constant.dart';
 import 'package:hello_world/models/api_response.dart';
 import 'package:hello_world/models/options.dart';
 import 'package:hello_world/models/property.dart';
+import 'package:hello_world/services/local_property_service.dart';
+import 'package:hello_world/services/local_user_service.dart';
 import 'package:http/http.dart' as http;
 import 'package:multi_select_flutter/util/multi_select_item.dart';
 import 'package:image_picker/image_picker.dart';
@@ -212,8 +215,11 @@ Future<void> getPropType() async {
 }
 
 Future<ApiResponse> get_all_property(int userId) async {
+  if (AppConfig.useLocalMode) {
+    return await LocalPropertyService().getAllProperties();
+  }
   ApiResponse apiResponse = ApiResponse();
-  // print('xxx');
+  // print('xxx')
   try {
     final response = await http.get(
       Uri.parse('$getAllPropUrl?user_id=$userId'),
@@ -275,6 +281,9 @@ Future<ApiResponse> get_one_property(int id, int userID) async {
 }
 
 Future<ApiResponse> add_to_fav({int prop_id = 0, int user_id = 0}) async {
+  if (AppConfig.useLocalMode) {
+    return await LocalUserService().toggleFavorite(prop_id, true);
+  }
   final apiResponse = ApiResponse();
   try {
     final Map<String, dynamic> data = {"prop_id": prop_id, "user_id": user_id};
@@ -301,6 +310,9 @@ Future<ApiResponse> add_to_fav({int prop_id = 0, int user_id = 0}) async {
 }
 
 Future<ApiResponse> remove_fav({int prop_id = 0, int user_id = 0}) async {
+  if (AppConfig.useLocalMode) {
+    return await LocalUserService().toggleFavorite(prop_id, false);
+  }
   final apiResponse = ApiResponse();
   try {
     final Map<String, dynamic> data = {"prop_id": prop_id, "user_id": user_id};
@@ -328,6 +340,9 @@ Future<ApiResponse> remove_fav({int prop_id = 0, int user_id = 0}) async {
 
 //returns property based on user search
 Future<ApiResponse> searched_property(String query) async {
+  if (AppConfig.useLocalMode) {
+    return await LocalPropertyService().searchProperties(query);
+  }
   ApiResponse apiResponse = ApiResponse();
   // print('xxx');
   try {
@@ -362,6 +377,9 @@ Future<ApiResponse> searched_property(String query) async {
 }
 
 Future<ApiResponse> get_fav_props(int userId) async {
+  if (AppConfig.useLocalMode) {
+    return await LocalUserService().getFavoriteProperties(userId);
+  }
   ApiResponse apiResponse = ApiResponse();
   try {
     final response = await http.get(Uri.parse('$getFavPropUrl?userID=$userId'),
@@ -388,6 +406,11 @@ Future<ApiResponse> get_fav_props(int userId) async {
 }
 
 Future<ApiResponse> get_all_ads() async {
+  if (AppConfig.useLocalMode) {
+    final r = ApiResponse();
+    r.data = <dynamic>[];
+    return r;
+  }
   ApiResponse apiResponse = ApiResponse();
   try {
     final response = await http.get(Uri.parse(getAllAddUrl), headers: {
@@ -435,6 +458,9 @@ Future<ApiResponse> getAdd(int id) async {
 }
 
 Future<ApiResponse> getUserProps(int id) async {
+  if (AppConfig.useLocalMode) {
+    return await LocalPropertyService().getUserProperties(id);
+  }
   ApiResponse apiResponse = ApiResponse();
   try {
     final response = await http.get(Uri.parse('$getUserPropsUrl?userId=$id'),

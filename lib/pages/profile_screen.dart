@@ -1,22 +1,12 @@
-// ignore_for_file: prefer_const_constructors, prefer_const_literals_to_create_immutables
-
-import 'package:cached_network_image/cached_network_image.dart';
-import 'package:firebase_auth/firebase_auth.dart' as fb_auth;
 import 'package:flutter/material.dart';
-import 'package:google_sign_in/google_sign_in.dart';
 import 'package:hello_world/pages/fav_list.dart';
 import 'package:hello_world/pages/my_props.dart';
-// import 'package:hello_world/models/property.dart';
 import 'package:hello_world/pages/sign_in.dart';
 import 'package:hello_world/services/user_service.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-
-import '../constant.dart';
 import '../models/user.dart';
 import 'bookings_screen.dart';
 import 'edit_profile_screen.dart';
 import 'faq_screen.dart';
-import 'payment_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -27,55 +17,15 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   User? _user;
-  bool _isloggingOut = false;
-  bool isLoading = true;
-  final List<Map<String, dynamic>> dataList = [
-    {
-      'icon': Icons.person,
-      'text': 'My Profile',
-      'screen': EditProfileScreen(),
-    },
-    {
-      'icon': Icons.favorite,
-      'text': 'Favorites',
-      'screen': FavProps(),
-    },
-    {
-      'icon': Icons.house,
-      'text': 'My Properties',
-      'screen': MyPropertiesScreen(),
-    },
-    {
-      'icon': Icons.question_answer,
-      'text': 'FAQs',
-      'screen': FAQScreen(),
-    },
-    {
-      'icon': Icons.add_home,
-      'text': 'My Bookings',
-      'screen': MyBookings(),
-    },
+  bool _isLoggingOut = false;
+
+  final List<Map<String, dynamic>> _menuItems = [
+    {'icon': Icons.person_rounded, 'label': 'My Profile', 'screen': EditProfileScreen()},
+    {'icon': Icons.favorite_rounded, 'label': 'Favorites', 'screen': FavProps()},
+    {'icon': Icons.home_work_rounded, 'label': 'My Properties', 'screen': MyPropertiesScreen()},
+    {'icon': Icons.help_outline_rounded, 'label': 'FAQs', 'screen': FAQScreen()},
+    {'icon': Icons.book_online_rounded, 'label': 'My Bookings', 'screen': MyBookings()},
   ];
-  final GoogleSignIn _googleSignIn = GoogleSignIn();
-
-  Future<bool> _handleSignOut() async {
-    try {
-      fb_auth.FirebaseAuth auth = fb_auth.FirebaseAuth.instance;
-      await auth.signOut();
-      await _googleSignIn.signOut();
-      await clearUserFromSharedPreferences();
-      return true;
-    } catch (e) {
-      return false;
-    }
-  }
-
-  void _navigateToSignIn(BuildContext context) {
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (context) => SignIn()),
-    );
-  }
 
   @override
   void initState() {
@@ -84,279 +34,189 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _loadUser() async {
-    try {
-      User? user = await getUserFromSharedPreferences();
-      if (mounted) {
-        setState(() {
-          _user = user;
+    final user = await getUserFromSharedPreferences();
+    if (mounted) setState(() => _user = user);
+  }
 
-          isLoading = false;
-          print(_user);
-        });
-      }
-    } catch (e) {
-      print(e);
-    }
+  Future<void> _logout() async {
+    setState(() => _isLoggingOut = true);
+    await clearUserFromSharedPreferences();
+    if (!mounted) return;
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const SignIn()),
+      (route) => false,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
+    final name = _user?.name ?? 'Demo User';
+    final email = _user?.email ?? '';
+    final userType = _user?.userType ?? 'tenant';
+    final initials = name.isNotEmpty ? name[0].toUpperCase() : 'U';
+
     return Scaffold(
-      backgroundColor: Colors.grey[200],
-      body: isLoading
-          ? Center(child: CircularProgressIndicator())
-          : SingleChildScrollView(
+      backgroundColor: const Color(0xFFF8F8FF),
+      body: SingleChildScrollView(
+        child: Column(
+          children: [
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.fromLTRB(20, 48, 20, 32),
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [Color(0xFF6246EA), Color(0xFF9B79FF)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+              ),
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                mainAxisAlignment: MainAxisAlignment.start,
                 children: [
-                  SizedBox(
-                    height: 45,
-                  ),
-                  CircleAvatar(
-                    radius: 36,
-                    child:
-                        _user?.imageUrl != null && _user!.imageUrl!.isNotEmpty
-                            ? ClipOval(
-                                child: CachedNetworkImage(
-                                  imageUrl: '$baseUrl${_user!.imageUrl!}',
-                                  fit: BoxFit.cover,
-                                  width: 100,
-                                  height: 100,
-                                  errorWidget: (context, url, error) => Icon(
-                                    Icons.person_rounded,
-                                    size: 48,
-                                    color: Color.fromARGB(255, 116, 116, 117),
-                                  ),
-                                ),
-                              )
-                            : const Icon(
-                                Icons.person_rounded,
-                                size: 48,
-                                color: Color.fromARGB(255, 116, 116, 117),
-                              ),
-                  ),
-
-                  SizedBox(
-                    height: 14,
-                  ),
-                  Text(
-                    _user!.name!,
-                    style: TextStyle(
-                        fontWeight: FontWeight.w800,
-                        fontFamily: 'Hind',
-                        fontSize: 18),
-                  ),
-                  Text(
-                    _user!.email!,
-                    style: TextStyle(
-                        fontWeight: FontWeight.normal,
-                        fontFamily: 'Hind',
-                        fontSize: 16,
-                        color: Colors.grey),
-                  ),
-                  SizedBox(
-                    height: 30,
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 14.0),
-                    child: Divider(
-                      height: 20,
-                      thickness: 1,
-                      color: Colors.grey[400],
+                  Container(
+                    width: 80,
+                    height: 80,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.25),
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.6), width: 2),
                     ),
-                  ),
-                  ListView.builder(
-                    shrinkWrap: true,
-                    physics: NeverScrollableScrollPhysics(),
-                    itemCount: dataList.length,
-                    itemBuilder: (context, index) {
-                      return GestureDetector(
-                        onTap: () {
-                          Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                  builder: ((context) =>
-                                      dataList[index]['screen'])));
-                        },
-                        child: Container(
-                          width: double.infinity,
-                          padding: EdgeInsets.fromLTRB(21, 21, 21, 2),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Container(
-                                child: Row(
-                                  children: [
-                                    Container(
-                                      padding: EdgeInsets.all(6),
-                                      decoration: BoxDecoration(
-                                        boxShadow: [
-                                          BoxShadow(
-                                            color: Colors.grey.withOpacity(0.3),
-                                            spreadRadius: 1,
-                                            blurRadius: 5,
-                                            offset: Offset(0, 2),
-                                          ),
-                                        ],
-                                        color: Colors.white,
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                      child: Icon(
-                                        dataList[index]['icon'],
-                                        color: Colors.black,
-                                        size: 18,
-                                      ),
-                                    ),
-                                    SizedBox(
-                                      width: 16,
-                                    ),
-                                    Text(
-                                      dataList[index]['text'],
-                                      style: TextStyle(
-                                          fontFamily: 'Hind',
-                                          fontSize: 16,
-                                          color: Colors.black,
-                                          fontWeight: FontWeight.w500),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              Icon(
-                                Icons.arrow_forward_ios_sharp,
-                                color: Colors.grey,
-                                size: 14,
-                              )
-                            ],
-                          ),
+                    child: Center(
+                      child: Text(
+                        initials,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 32,
+                          fontWeight: FontWeight.w700,
+                          fontFamily: 'Hind',
                         ),
-                      );
-                    },
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 14.0, vertical: 21),
-                    child: Divider(
-                      height: 20,
-                      thickness: 1,
-                      color: Colors.grey[400],
+                      ),
                     ),
                   ),
-                  // Padding(
-                  //   padding: EdgeInsets.fromLTRB(21, 0, 21, 2),
-                  //   // padding: EdgeInsets.all(0),
-                  //   child: Row(
-                  //     mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  //     children: [
-                  //       Container(
-                  //         child: Row(
-                  //           children: [
-                  //             Container(
-                  //               padding: EdgeInsets.all(6),
-                  //               decoration: BoxDecoration(
-                  //                 boxShadow: [
-                  //                   BoxShadow(
-                  //                     color: Colors.grey.withOpacity(0.3),
-                  //                     spreadRadius: 1,
-                  //                     blurRadius: 5,
-                  //                     offset: Offset(0, 2),
-                  //                   ),
-                  //                 ],
-                  //                 color: Colors.white,
-                  //                 borderRadius: BorderRadius.circular(8),
-                  //               ),
-                  //               child: Icon(
-                  //                 Icons.toggle_on,
-                  //                 color: Colors.black,
-                  //                 size: 18,
-                  //               ),
-                  //             ),
-                  //             SizedBox(
-                  //               width: 16,
-                  //             ),
-                  //             Text(
-                  //               "Switch to landlord",
-                  //               style: TextStyle(
-                  //                   fontFamily: 'Hind',
-                  //                   fontSize: 16,
-                  //                   color: Colors.black,
-                  //                   fontWeight: FontWeight.w500),
-                  //             ),
-                  //           ],
-                  //         ),
-                  //       ),
-                  //       Icon(
-                  //         Icons.arrow_forward_ios_sharp,
-                  //         color: Colors.grey,
-                  //         size: 14,
-                  //       )
-                  //     ],
-                  //   ),
-                  // ),
-                  Padding(
-                    padding: EdgeInsets.fromLTRB(21, 20, 21, 0),
-                    child: _isloggingOut
-                        ? Center(child: CircularProgressIndicator())
-                        : ElevatedButton(
-                            // onPressed: () {
-                            //   // Add your "Get Started" button logic here
-                            //   // _navigateToSignIn(context);
-                            //   // print("Button pressed!");
-
-                            // },
-                            onPressed: () async {
-                              // _handle_google_singin();
-                              //------------------------
-                              setState(() {
-                                _isloggingOut = true;
-                              });
-                              SharedPreferences pref =
-                                  await SharedPreferences.getInstance();
-                              String? is_google_login =
-                                  pref.getString('is_google_login');
-                              if (is_google_login == 'Y') {
-                                bool signedOut = await _handleSignOut();
-
-                                if (signedOut) {
-                                  if (!context.mounted) return;
-                                  _navigateToSignIn(context);
-                                }
-                              } else {
-                                print('N');
-                                await clearUserFromSharedPreferences();
-                                if (!context.mounted) return;
-                                _navigateToSignIn(context);
-                              }
-
-                              //------------------------
-                              // final api = API();
-                              // getChatUserIds();
-                            },
-                            style: ButtonStyle(
-                              backgroundColor: MaterialStateProperty.all<Color>(
-                                  Color(0xFF6246EA)),
-                              minimumSize: MaterialStateProperty.all<Size>(
-                                  const Size(double.infinity, 48)),
-                              shape: MaterialStateProperty.all<
-                                  RoundedRectangleBorder>(
-                                RoundedRectangleBorder(
-                                  borderRadius:
-                                      BorderRadius.circular(8.0), // Customize
-                                ),
-                              ),
-                            ),
-                            child: const Text(
-                              'Logout',
-                              style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w400,
-                                  color: Color(0xFFFFFFFF)),
-                            ),
-                          ),
-                  )
+                  const SizedBox(height: 12),
+                  Text(
+                    name,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 20,
+                      fontWeight: FontWeight.w700,
+                      fontFamily: 'Hind',
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    email,
+                    style: const TextStyle(
+                        color: Colors.white70, fontSize: 13),
+                  ),
+                  const SizedBox(height: 10),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      userType.toUpperCase(),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.8,
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),
+            const SizedBox(height: 16),
+            Container(
+              margin: const EdgeInsets.symmetric(horizontal: 16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.05),
+                    blurRadius: 10,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: ListView.separated(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: _menuItems.length,
+                separatorBuilder: (_, __) => const Divider(
+                    height: 1, indent: 56, endIndent: 16),
+                itemBuilder: (context, index) {
+                  final item = _menuItems[index];
+                  return ListTile(
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => item['screen'] as Widget),
+                    ),
+                    leading: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color:
+                            const Color(0xFF6246EA).withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Icon(item['icon'] as IconData,
+                          color: const Color(0xFF6246EA), size: 18),
+                    ),
+                    title: Text(
+                      item['label'] as String,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w500,
+                        color: Color(0xFF1A1A2E),
+                        fontFamily: 'Hind',
+                      ),
+                    ),
+                    trailing: const Icon(Icons.chevron_right_rounded,
+                        color: Color(0xFF8E8E93), size: 20),
+                  );
+                },
+              ),
+            ),
+            const SizedBox(height: 16),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: _isLoggingOut
+                  ? const Center(
+                      child: CircularProgressIndicator(
+                          color: Color(0xFF6246EA)))
+                  : SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: _logout,
+                        icon: const Icon(Icons.logout_rounded,
+                            color: Colors.white, size: 18),
+                        label: const Text(
+                          'Logout',
+                          style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF6246EA),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12)),
+                          elevation: 0,
+                        ),
+                      ),
+                    ),
+            ),
+            const SizedBox(height: 32),
+          ],
+        ),
+      ),
     );
   }
 }

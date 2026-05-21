@@ -1,12 +1,6 @@
-// ignore_for_file: prefer_const_constructors, prefer_const_literals_to_create_immutables
-
-import 'dart:convert';
-import 'package:http/http.dart' as http;
 import 'package:flutter/material.dart';
-import 'package:hello_world/constant.dart';
 import 'package:hello_world/models/facility.dart';
 import 'package:hello_world/models/filterscreenresult.dart';
-
 import '../models/options.dart';
 
 class FilterScreen extends StatefulWidget {
@@ -17,343 +11,216 @@ class FilterScreen extends StatefulWidget {
 }
 
 class _FilterScreenState extends State<FilterScreen> {
-  RangeValues values = RangeValues(0, 20000);
-  bool isLoading = true;
-  List<Facility> facilities = [];
-  var _isSelected = false;
+  RangeValues values = const RangeValues(0, 100000);
   List<Facility> selectedFacilities = [];
-  List<Options> propertyTypes = [];
   List<Options> selectedPropertyTypes = [];
 
-  @override
-  void initState() {
-    // TODO: implement initState
-    super.initState();
-    getHomeFacility();
-    fetchPropertyTypes();
-  }
+  static final List<Facility> _facilities = [
+    Facility(id: 1, facility: 'WiFi'),
+    Facility(id: 2, facility: 'Parking'),
+    Facility(id: 3, facility: 'Gym'),
+    Facility(id: 4, facility: 'Swimming Pool'),
+    Facility(id: 5, facility: 'Security'),
+    Facility(id: 6, facility: 'Power Backup'),
+    Facility(id: 7, facility: 'Lift'),
+    Facility(id: 8, facility: 'Garden'),
+  ];
 
-  Future<void> getHomeFacility() async {
-    try {
-      final response = await http.get(Uri.parse(getHomeFacUrl));
-      // print(response.body);
-      if (response.statusCode == 200) {
-        final decodedData = jsonDecode(response.body) as Map<String, dynamic>;
-        if (decodedData['success']) {
-          setState(() {
-            facilities = (decodedData['data'] as List)
-                .map((item) => Facility(
-                      id: item['id'],
-                      facility: item['facility'],
-                    ))
-                .toList();
-            isLoading = false;
-          });
-          // print(facilities);
-        } else {
-          // print("Error: ${decodedData['message']}");
-        }
-      } else {
-        // print("Error: ${response.statusCode}");
-      }
-    } catch (e) {
-      // print(e);
-    }
-  }
-
-  Future<void> fetchPropertyTypes() async {
-    final response = await http.get(Uri.parse(getPropTypeUrl));
-
-    if (response.statusCode == 200) {
-      final jsonData = json.decode(response.body);
-      final List<dynamic> data = jsonData['data'];
-
-      setState(() {
-        propertyTypes = data
-            .map((item) => Options(
-                  id: item['id'],
-                  name: item['property_type'],
-                ))
-            .toList();
-        print(propertyTypes);
-      });
-    } else {
-      throw Exception('Failed to load property types');
-    }
-  }
+  static final List<Options> _propertyTypes = [
+    Options(id: 1, name: 'Apartment'),
+    Options(id: 2, name: 'Studio'),
+    Options(id: 3, name: 'Villa'),
+    Options(id: 4, name: 'Room Share'),
+  ];
 
   @override
   Widget build(BuildContext context) {
-    RangeLabels labels =
-        // RangeLabels(values.start.toString(), values.end.toString());
-        RangeLabels(
-      'Rs ${values.start.round()}',
-      'Rs ${values.end.round()}',
-    );
-    // List<bool> selectedStates = List.filled(filterOptions.length, false);
     return Scaffold(
-      appBar: PreferredSize(
-        preferredSize: Size.fromHeight(70),
-        child: Container(
-          padding: EdgeInsets.only(top: 10, right: 15, left: 1.5),
-          // padding: EdgeInsets.all(0),
-          child: AppBar(
-            surfaceTintColor: Colors.transparent,
-            leading: BackButton(
-              color: Color(0xFF6246EA),
-            ),
-            actions: [
-              IconButton(
-                icon: Icon(
-                  Icons.align_vertical_center_rounded,
-                  color: Color(0xFF6246EA),
-                ),
-                onPressed: () {
-                  // Add your onPressed logic here
-                },
-              ),
-            ],
+      backgroundColor: const Color(0xFFF8F8FF),
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        surfaceTintColor: Colors.transparent,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new_rounded,
+              color: Color(0xFF6246EA), size: 20),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: const Text(
+          'Filter Properties',
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.w700,
+            color: Color(0xFF1A1A2E),
+            fontFamily: 'Hind',
           ),
         ),
       ),
-      body: isLoading
-          ? Center(
-              child: CircularProgressIndicator(),
-            )
-          : SafeArea(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: SingleChildScrollView(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          // Padding(
-                          //   padding: const EdgeInsets.fromLTRB(21, 8, 21, 0),
-                          //   child: Text(
-                          //     textAlign: TextAlign.left,
-                          //     "Property type",
-                          //     style: TextStyle(
-                          //         fontWeight: FontWeight.w700,
-                          //         fontFamily: 'Hind',
-                          //         fontSize: 20),
-                          //   ),
-                          // ),
-                          // Container(
-                          //   height: 90,
-                          //   // color: Colors.amber,
-                          //   child: ListView.builder(
-                          //     scrollDirection: Axis.horizontal,
-                          //     // itemExtent: 500,
-                          //     shrinkWrap: true,
-                          //     // physics: NeverScrollableScrollPhysics(),
-                          //     itemCount: 5,
-                          //     itemBuilder: (context, index) {
-                          //       return Padding(
-                          //         padding: EdgeInsets.fromLTRB(21, 0, 14, 12),
-                          //         // padding: EdgeInsets.all(0),
-                          //         child: FilterChip(
-                          //           label: Text('Filter 1'),
-                          //           onSelected: (bool selected) {},
-                          //         ),
-                          //       );
-                          //     },
-                          //   ),
-                          // ),
-                          Padding(
-                            padding: const EdgeInsets.fromLTRB(21, 5, 21, 1),
-                            child: Text(
-                              textAlign: TextAlign.left,
-                              "Price range",
-                              style: TextStyle(
-                                  fontWeight: FontWeight.w700,
-                                  fontFamily: 'Hind',
-                                  fontSize: 20),
-                            ),
-                          ),
-                          Padding(
-                              padding: const EdgeInsets.fromLTRB(21, 4, 21, 4),
-                              child: RichText(
-                                text: TextSpan(
-                                  style: DefaultTextStyle.of(context).style,
-                                  children: [
-                                    TextSpan(
-                                      text: 'Rs ${values.start.round()} - ',
-                                      style: TextStyle(
-                                        fontFamily: 'Hind',
-                                        fontWeight: FontWeight.w500,
-                                        fontSize: 18,
-                                        color: Colors.grey[850],
-                                        decoration: TextDecoration.none,
-                                      ),
-                                    ),
-                                    // TextSpan(text: '  '),
-                                    TextSpan(
-                                      text: 'Rs ${values.end.round()} ',
-                                      style: TextStyle(
-                                        fontFamily: 'Hind',
-                                        fontWeight: FontWeight.w500,
-                                        fontSize: 18,
-                                        color: Colors.grey[850],
-                                        decoration: TextDecoration.none,
-                                      ),
-                                    ),
-                                    TextSpan(
-                                      text: ' /month',
-                                      style: TextStyle(
-                                        fontFamily: 'Hind',
-                                        fontWeight: FontWeight.w400,
-                                        fontSize: 18,
-                                        color: Colors.grey,
-                                        decoration: TextDecoration.none,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              )),
-                          Padding(
-                            padding: const EdgeInsets.fromLTRB(12, 0, 12, 0),
-                            child: RangeSlider(
-                                values: values,
-                                labels: labels,
-                                divisions: 10,
-                                min: 0,
-                                max: 20000,
-                                onChanged: (newVal) {
-                                  values = newVal;
-                                  setState(() {
-                                    values = newVal;
-                                  });
-                                }),
-                          ),
-
-                          Padding(
-                            padding:
-                                EdgeInsets.only(left: 21, right: 21, top: 12),
-                            child: Text(
-                              "Property facilities",
-                              style: TextStyle(
-                                  fontWeight: FontWeight.w700,
-                                  fontFamily: 'Hind',
-                                  fontSize: 20),
-                            ),
-                          ),
-
-                          Padding(
-                            padding: const EdgeInsets.all(21.0),
-                            child: Wrap(
-                              spacing: 8.0,
-                              children: facilities.map((facility) {
-                                return FilterChip(
-                                  label: Text(facility.facility),
-                                  selected: facility.isSelected,
-                                  onSelected: (bool selected) {
-                                    setState(() {
-                                      facility.isSelected = selected;
-                                      if (selected) {
-                                        selectedFacilities.add(facility);
-                                        // print(selectedFacilities);
-                                      } else {
-                                        selectedFacilities.remove(facility);
-                                        // print(selectedFacilities);
-                                      }
-                                    });
-                                  },
-                                  selectedColor: Colors.blue.withOpacity(0.5),
-                                );
-                              }).toList(),
-                            ),
-                          ),
-                          Padding(
-                            padding:
-                                EdgeInsets.only(left: 21, right: 21, top: 12),
-                            child: Text(
-                              "Property Type",
-                              style: TextStyle(
-                                  fontWeight: FontWeight.w700,
-                                  fontFamily: 'Hind',
-                                  fontSize: 20),
-                            ),
-                          ),
-                          Padding(
-                            padding: const EdgeInsets.all(21.0),
-                            child: Wrap(
-                              spacing: 8.0,
-                              children: propertyTypes.map((propertyType) {
-                                return FilterChip(
-                                  label: Text(propertyType.name),
-                                  selected: selectedPropertyTypes
-                                      .contains(propertyType),
-                                  onSelected: (bool selected) {
-                                    setState(() {
-                                      if (selected) {
-                                        selectedPropertyTypes.add(propertyType);
-                                      } else {
-                                        selectedPropertyTypes
-                                            .remove(propertyType);
-                                      }
-                                    });
-                                  },
-                                  selectedColor: Colors.blue.withOpacity(0.5),
-                                );
-                              }).toList(),
-                            ),
-                          ),
-                          SizedBox(
-                            height: 8,
-                          ),
-                          Padding(
-                            padding: const EdgeInsets.fromLTRB(21, 21, 21, 12),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.end,
-                              children: [
-                                // TextButton(
-                                //   onPressed: () {},
-                                //   child: Text("Reset All",
-                                //       style: TextStyle(
-                                //           fontSize: 18,
-                                //           fontFamily: 'Hind',
-                                //           color: Colors.grey,
-                                //           decoration: TextDecoration.underline)),
-                                // ),
-                                ElevatedButton(
-                                  onPressed: () {
-                                    // print(FilterScreenResult);
-                                    Navigator.pop(
-                                      context,
-                                      // values,
-                                      FilterScreenResult(
-                                        values: values,
-                                        selectedFacilities: selectedFacilities,
-                                        selectedPropType: selectedPropertyTypes,
-                                      ),
-                                    );
-                                  },
-                                  style: ButtonStyle(
-                                    backgroundColor:
-                                        MaterialStateProperty.all<Color>(
-                                            Color(0xFF6246EA)),
-                                  ),
-                                  child: Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 12.0),
-                                    child: Text(
-                                      "Submit",
-                                      style: TextStyle(color: Colors.white),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
+      body: SafeArea(
+        child: Column(
+          children: [
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Price Range',
+                        style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontFamily: 'Hind',
+                            fontSize: 18,
+                            color: Color(0xFF1A1A2E))),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Rs ${values.start.round()} — Rs ${values.end.round()} /month',
+                      style: const TextStyle(
+                          fontSize: 15,
+                          color: Color(0xFF6246EA),
+                          fontWeight: FontWeight.w600),
                     ),
-                  ),
-                ],
+                    RangeSlider(
+                      values: values,
+                      min: 0,
+                      max: 100000,
+                      divisions: 20,
+                      activeColor: const Color(0xFF6246EA),
+                      inactiveColor: const Color(0xFFE0E0E0),
+                      onChanged: (v) => setState(() => values = v),
+                    ),
+                    const SizedBox(height: 20),
+                    const Text('Property Type',
+                        style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontFamily: 'Hind',
+                            fontSize: 18,
+                            color: Color(0xFF1A1A2E))),
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: _propertyTypes.map((pt) {
+                        final selected = selectedPropertyTypes.contains(pt);
+                        return GestureDetector(
+                          onTap: () => setState(() {
+                            selected
+                                ? selectedPropertyTypes.remove(pt)
+                                : selectedPropertyTypes.add(pt);
+                          }),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: selected
+                                  ? const Color(0xFF6246EA)
+                                  : Colors.white,
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(
+                                color: selected
+                                    ? const Color(0xFF6246EA)
+                                    : const Color(0xFFE0E0E0),
+                              ),
+                            ),
+                            child: Text(
+                              pt.name,
+                              style: TextStyle(
+                                color: selected
+                                    ? Colors.white
+                                    : const Color(0xFF555555),
+                                fontWeight: selected
+                                    ? FontWeight.w600
+                                    : FontWeight.normal,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                    const SizedBox(height: 24),
+                    const Text('Facilities',
+                        style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontFamily: 'Hind',
+                            fontSize: 18,
+                            color: Color(0xFF1A1A2E))),
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: _facilities.map((f) {
+                        final selected = selectedFacilities.contains(f);
+                        return GestureDetector(
+                          onTap: () => setState(() {
+                            f.isSelected = !f.isSelected;
+                            selected
+                                ? selectedFacilities.remove(f)
+                                : selectedFacilities.add(f);
+                          }),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: selected
+                                  ? const Color(0xFF6246EA)
+                                  : Colors.white,
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(
+                                color: selected
+                                    ? const Color(0xFF6246EA)
+                                    : const Color(0xFFE0E0E0),
+                              ),
+                            ),
+                            child: Text(
+                              f.facility,
+                              style: TextStyle(
+                                color: selected
+                                    ? Colors.white
+                                    : const Color(0xFF555555),
+                                fontWeight: selected
+                                    ? FontWeight.w600
+                                    : FontWeight.normal,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ],
+                ),
               ),
             ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+              child: SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () => Navigator.pop(
+                    context,
+                    FilterScreenResult(
+                      values: values,
+                      selectedFacilities: selectedFacilities,
+                      selectedPropType: selectedPropertyTypes,
+                    ),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF6246EA),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                    elevation: 0,
+                  ),
+                  child: const Text('Apply Filters',
+                      style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600)),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
